@@ -29,11 +29,12 @@ import org.apache.nifi.reporting.InitializationException;
 import org.integratedmodelling.common.authentication.Authentication;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.engine.Engine;
+import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 
 @Tags({"example"})
 @CapabilityDescription("Controller service providing access to the k.LAB network.")
-public class KlabControllerService extends AbstractControllerService implements MyService {
+public class KlabControllerService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
       new PropertyDescriptor.Builder()
@@ -48,6 +49,7 @@ public class KlabControllerService extends AbstractControllerService implements 
 
   private Engine engine;
   private UserScope userScope;
+  private Scope configuredScope;
 
   @Override
   protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -78,5 +80,7 @@ public class KlabControllerService extends AbstractControllerService implements 
   public void shutdown() {}
 
   @Override
-  public void execute() {}
+  public Scope getScope(Class<? extends Scope> scopeClass) {
+    return this.configuredScope;
+  }
 }

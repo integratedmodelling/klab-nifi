@@ -22,23 +22,32 @@ import org.apache.nifi.util.TestRunners;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.net.MalformedURLException;
+
 public class TestKlabControllerService {
 
-    @BeforeEach
-    public void init() {
+  @BeforeEach
+  public void init() {}
 
-    }
+  @Test
+  public void testService() throws InitializationException, MalformedURLException {
+    final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
+    final KlabControllerService service = new KlabControllerService();
+    runner.addControllerService("test-good", service);
+    File certificateFile =
+        new File(
+            System.getProperty("user.home")
+                + File.pathSeparator
+                + ".klab"
+                + File.pathSeparator
+                + "klab.cert");
+    runner.setProperty(
+        service,
+        KlabControllerService.CERTIFICATE_PROPERTY,
+        String.valueOf(certificateFile.toURI().toURL()));
+    runner.enableControllerService(service);
 
-    @Test
-    public void testService() throws InitializationException {
-        final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
-        final KlabControllerService service = new KlabControllerService();
-        runner.addControllerService("test-good", service);
-
-        runner.setProperty(service, KlabControllerService.CERTIFICATE_PROPERTY, "test-value");
-        runner.enableControllerService(service);
-
-        runner.assertValid(service);
-    }
-
+    runner.assertValid(service);
+  }
 }

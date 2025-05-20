@@ -19,11 +19,18 @@ package org.integratedmodelling.klab.nifi;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.controller.ControllerService;
+import org.integratedmodelling.klab.api.scope.Scope;
 
 @Tags({"example"})
 @CapabilityDescription("Example Service API.")
-public interface MyService extends ControllerService {
+public interface KlabController extends ControllerService {
 
-    void execute();
-
+  /**
+   * Return the k.LAB scope configured in the processor, whose specific class depends on
+   * configuration.
+   *
+   * @return the scope requested. A scope appropriate for the request will be created if not
+   *     configured in advance.
+   */
+  Scope getScope(Class<? extends Scope> scopeClass);
 }
