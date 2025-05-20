@@ -6,10 +6,11 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.exception.ProcessException;
 
 /**
- * Receive an unresolved observation and emit the correspondent contextualized one when the runtime
- * has produced it.
+ * Receive messages from the currently configured scope and relay them as output.
+ *
+ * <p>TODO add properties to filter messages
  */
-public class ObserveProcessor extends AbstractProcessor {
+public class MessageRelayProcessor extends AbstractProcessor {
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {}
 }

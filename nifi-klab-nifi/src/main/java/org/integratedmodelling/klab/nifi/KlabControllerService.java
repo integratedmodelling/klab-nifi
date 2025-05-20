@@ -32,8 +32,9 @@ import org.integratedmodelling.klab.api.engine.Engine;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 
-@Tags({"example"})
-@CapabilityDescription("Controller service providing access to the k.LAB network.")
+/** Logs a federated user into k.LAB and maintains a set of scopes for that user. */
+@Tags({"k.LAB"})
+@CapabilityDescription("Controller service providing a k.LAB scope to access the k.LAB network.")
 public class KlabControllerService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
@@ -50,6 +51,7 @@ public class KlabControllerService extends AbstractControllerService implements 
   private Engine engine;
   private UserScope userScope;
   private Scope configuredScope;
+  private Authentication.FederationData federationData;
 
   @Override
   protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -65,14 +67,22 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine = new EngineImpl();
     // TODO find certificate through properties
     this.userScope = engine.authenticate();
-    var federationData =
+    if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
+      throw new InitializationException(
+          "Unable to authenticate to k.LAB. Authentication is required for operation.");
+    }
+    this.federationData =
         this.userScope == null
             ? null
             : Authentication.INSTANCE.getFederationData(this.userScope.getUser());
     if (federationData == null) {
-      throw new InitializationException(
-          "Unable to authenticate to k.LAB or the authenticating certificate is not in a federation.");
+      getLogger()
+          .warn(
+              "User {} is not federated: messaging features disabled.",
+              userScope.getUser().getUsername());
     }
+    this.engine.boot();
+    this.configuredScope = this.userScope;
     // TODO check properties for a DT URL or ID
   }
 
@@ -81,6 +91,8 @@ public class KlabControllerService extends AbstractControllerService implements 
 
   @Override
   public Scope getScope(Class<? extends Scope> scopeClass) {
+    // TODO check if scope is configured for this user. If not, a default session scope and context
+    //  scope can be created when the correspondent classes are requested.
     return this.configuredScope;
   }
 }

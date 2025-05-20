@@ -29,14 +29,15 @@ public class TestProcessor extends AbstractProcessor {
 
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+
     }
 
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         List<PropertyDescriptor> propDescs = new ArrayList<>();
         propDescs.add(new PropertyDescriptor.Builder()
-                .name("MyService test processor")
-                .description("MyService test processor")
+                .name("k.LAB test processor")
+                .description("k.LAB test processor")
                 .identifiesControllerService(KlabController.class)
                 .required(true)
                 .build());

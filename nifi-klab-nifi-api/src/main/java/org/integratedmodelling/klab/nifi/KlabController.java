@@ -21,8 +21,8 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.controller.ControllerService;
 import org.integratedmodelling.klab.api.scope.Scope;
 
-@Tags({"example"})
-@CapabilityDescription("Example Service API.")
+@Tags({"k.LAB"})
+@CapabilityDescription("k.LAB Service API.")
 public interface KlabController extends ControllerService {
 
   /**

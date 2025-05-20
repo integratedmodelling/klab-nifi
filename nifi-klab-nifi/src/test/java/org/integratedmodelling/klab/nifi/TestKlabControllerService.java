@@ -32,9 +32,12 @@ public class TestKlabControllerService {
 
   @Test
   public void testService() throws InitializationException, MalformedURLException {
+
     final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
     final KlabControllerService service = new KlabControllerService();
-    runner.addControllerService("test-good", service);
+    runner.addControllerService("klab", service);
+
+    // This is the default certificate location - passing it is not required
     File certificateFile =
         new File(
             System.getProperty("user.home")
@@ -46,8 +49,9 @@ public class TestKlabControllerService {
         service,
         KlabControllerService.CERTIFICATE_PROPERTY,
         String.valueOf(certificateFile.toURI().toURL()));
-    runner.enableControllerService(service);
 
+    runner.enableControllerService(service);
     runner.assertValid(service);
+
   }
 }
