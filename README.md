@@ -29,3 +29,8 @@ assets which will be communicated to any remote connected scopes.
   k.LAB
   users who are part of a federated group.
 
+## Building
+
+The standard Maven build will leave the self-contained NAR file in nifi-klab-nifi-nar, ready for use within a NiFi
+instance.
+
