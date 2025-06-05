@@ -7,10 +7,13 @@ import org.apache.nifi.processor.exception.ProcessException;
 
 /**
  * Receive an externally resolved observation encoding the resolution data within its metadata.
- * Validate it and submit it to the current scope, which must be a ContextScope in a configuration
- * compatible with the observation.
+ * Validate it and submit it to the configured scope, which must be a {@link
+ * org.integratedmodelling.klab.api.scope.ContextScope} "tuned" to the appropriate geometry and
+ * semantics that can receive the observation.
  */
 public class SubmitProcessor extends AbstractProcessor {
   @Override
-  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {}
+  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+    var controller = getControllerServiceLookup().getControllerServiceIdentifiers(KlabControllerService.class);
+  }
 }

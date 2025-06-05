@@ -11,5 +11,8 @@ import org.apache.nifi.processor.exception.ProcessException;
  */
 public class ObserveProcessor extends AbstractProcessor {
   @Override
-  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {}
+  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+    var controller =
+        getControllerServiceLookup().getControllerServiceIdentifiers(KlabControllerService.class);
+  }
 }

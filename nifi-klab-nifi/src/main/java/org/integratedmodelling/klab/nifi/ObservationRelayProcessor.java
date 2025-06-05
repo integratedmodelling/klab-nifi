@@ -22,6 +22,8 @@ public class ObservationRelayProcessor extends AbstractProcessor {
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
     // Establish the output ('success') FlowFile and install a listener to pipe the observations
     // through it
+    var controller = getControllerServiceLookup().getControllerServiceIdentifiers(KlabControllerService.class);
+
   }
 
   @OnScheduled

@@ -29,12 +29,15 @@ import org.apache.nifi.reporting.InitializationException;
 import org.integratedmodelling.common.authentication.Authentication;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.engine.Engine;
+import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
+import org.integratedmodelling.klab.api.services.KlabService;
 
 /** Logs a federated user into k.LAB and maintains a set of scopes for that user. */
 @Tags({"k.LAB"})
-@CapabilityDescription("Controller service providing a k.LAB scope to access the k.LAB network.")
+@CapabilityDescription(
+    "Controller service providing a k.LAB user scope and federation-wide messaging facilities")
 public class KlabControllerService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
@@ -51,7 +54,7 @@ public class KlabControllerService extends AbstractControllerService implements 
   private Engine engine;
   private UserScope userScope;
   private Scope configuredScope;
-  private Authentication.FederationData federationData;
+  private Federation federation;
 
   @Override
   protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -64,18 +67,18 @@ public class KlabControllerService extends AbstractControllerService implements 
    */
   @OnEnabled
   public void onEnabled(final ConfigurationContext context) throws InitializationException {
-    this.engine = new EngineImpl();
+    this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
     // TODO find certificate through properties
     this.userScope = engine.authenticate();
     if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
       throw new InitializationException(
           "Unable to authenticate to k.LAB. Authentication is required for operation.");
     }
-    this.federationData =
+    this.federation =
         this.userScope == null
             ? null
             : Authentication.INSTANCE.getFederationData(this.userScope.getUser());
-    if (federationData == null) {
+    if (federation == null) {
       getLogger()
           .warn(
               "User {} is not federated: messaging features disabled.",
@@ -84,6 +87,14 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine.boot();
     this.configuredScope = this.userScope;
     // TODO check properties for a DT URL or ID
+  }
+
+  private void updateServiceStatus(KlabService service, KlabService.ServiceStatus serviceStatus) {
+    // TODO keep tabs on all available services and their status
+  }
+
+  private void updateEngineStatus(Engine.Status status) {
+    // TODO update and log what needed
   }
 
   @OnDisabled
