@@ -87,6 +87,7 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine.boot();
     this.configuredScope = this.userScope;
     // TODO check properties for a DT URL or ID
+    // TODO install overall message router as a listener
   }
 
   private void updateServiceStatus(KlabService service, KlabService.ServiceStatus serviceStatus) {
@@ -98,7 +99,9 @@ public class KlabControllerService extends AbstractControllerService implements 
   }
 
   @OnDisabled
-  public void shutdown() {}
+  public void shutdown() {
+    // TODO remove all listeners
+  }
 
   @Override
   public Scope getScope(Class<? extends Scope> scopeClass) {
