@@ -16,7 +16,10 @@
  */
 package org.integratedmodelling.klab.nifi;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
@@ -33,6 +36,7 @@ import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.KlabService;
+import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /** Logs a federated user into k.LAB and maintains a set of scopes for that user. */
 @Tags({"k.LAB"})
@@ -49,12 +53,26 @@ public class KlabControllerService extends AbstractControllerService implements 
           .addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
-  private static final List<PropertyDescriptor> properties = List.of(CERTIFICATE_PROPERTY);
+  public static final PropertyDescriptor DEFAULT_QUEUES =
+      new PropertyDescriptor.Builder()
+          .name("default-queues")
+          .displayName("Default queues")
+          .description(
+              "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
+                  + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
+          .required(false)
+          .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+          .build();
+
+  private static final List<PropertyDescriptor> properties =
+      List.of(CERTIFICATE_PROPERTY, DEFAULT_QUEUES);
 
   private Engine engine;
   private UserScope userScope;
   private Scope configuredScope;
   private Federation federation;
+  private Set<Message.Queue> queues =
+      EnumSet.of(Message.Queue.Events, Message.Queue.Errors, Message.Queue.Status);
 
   @Override
   protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {

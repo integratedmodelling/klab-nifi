@@ -31,9 +31,9 @@ public class TestKlabControllerService {
   public void init() {}
 
   @Test
-  public void testService() throws InitializationException, MalformedURLException {
+  public void testMessageRelayProcessor() throws InitializationException, MalformedURLException {
 
-    final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
+    final TestRunner runner = TestRunners.newTestRunner(MessageRelayProcessor.class);
     final KlabControllerService service = new KlabControllerService();
     runner.addControllerService("klab", service);
 
@@ -52,6 +52,5 @@ public class TestKlabControllerService {
 
     runner.enableControllerService(service);
     runner.assertValid(service);
-
   }
 }

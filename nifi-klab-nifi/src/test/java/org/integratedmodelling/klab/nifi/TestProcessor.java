@@ -16,32 +16,38 @@
  */
 package org.integratedmodelling.klab.nifi;
 
-import java.util.ArrayList;
-import java.util.List;
+import org.apache.nifi.reporting.InitializationException;
+import org.apache.nifi.util.TestRunner;
+import org.apache.nifi.util.TestRunners;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
-import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.processor.AbstractProcessor;
-import org.apache.nifi.processor.ProcessContext;
-import org.apache.nifi.processor.ProcessSession;
-import org.apache.nifi.processor.exception.ProcessException;
+public class TestProcessor {
 
-public class TestProcessor extends AbstractProcessor {
+  private TestRunner testRunner;
+  @Mock private KlabController mockKlabController;
+  private AutoCloseable mockitoContext;
 
-    @Override
-    public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+  @BeforeEach
+  public void setUp() throws InitializationException {
+    mockitoContext = MockitoAnnotations.openMocks(this);
+    testRunner = TestRunners.newTestRunner(MessageRelayProcessor.class);
+    testRunner.addControllerService("klab-controller", mockKlabController);
+    testRunner.enableControllerService(mockKlabController);
+  }
 
+  @AfterEach
+  public void tearDown() throws Exception {
+    if (mockitoContext != null) {
+      mockitoContext.close();
     }
+  }
 
-    @Override
-    protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
-        List<PropertyDescriptor> propDescs = new ArrayList<>();
-        propDescs.add(new PropertyDescriptor.Builder()
-                .name("k.LAB test processor")
-                .description("k.LAB test processor")
-                .identifiesControllerService(KlabController.class)
-                .required(true)
-                .build());
-        return propDescs;
-    }
-
+  @Test
+  public void testProcessorConfiguration() {
+    testRunner.assertValid();
+  }
 }
