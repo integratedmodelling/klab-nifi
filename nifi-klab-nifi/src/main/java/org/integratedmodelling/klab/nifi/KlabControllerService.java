@@ -42,14 +42,14 @@ import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /**
  * The <code>KlabControllerService</code> is required by all k.LAB processors and is responsible for
- * establishing connection to k.LAB and setting up the scope of interest, which can be a UserScope,
- * a SessionScope or a ContextScope according to configuration.
+ * establishing connection to k.LAB and setting up the scope of interest, which can be a {@link
+ * UserScope}, a {@link org.integratedmodelling.klab.api.scope.SessionScope}, or a {@link
+ * org.integratedmodelling.klab.api.scope.ContextScope} according to configuration.
  *
  * <p>The controller logs a federated user into k.LAB upon creation, sets up the target scope based
- * on configuration, and translates events from the scope into NiFi-consumable {@link
+ * on configuration and translates events from the scope into NiFi-consumable {@link
  * org.apache.nifi.flowfile.FlowFile}s, which other processors can consume.
  */
-
 public class KlabControllerService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
@@ -132,7 +132,7 @@ public class KlabControllerService extends AbstractControllerService implements 
     // TODO check properties for a DT URL or ID
     // TODO install overall message router as a listener for errors or other loggable conditions
 
-    // Set up message listener for the configured scope
+    // Set up a message listener for the configured scope
     if (this.configuredScope != null) {
       setupMessageListener();
     }

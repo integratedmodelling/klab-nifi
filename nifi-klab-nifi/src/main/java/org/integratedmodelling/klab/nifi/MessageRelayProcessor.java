@@ -37,14 +37,6 @@ import java.util.concurrent.TimeUnit;
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class MessageRelayProcessor extends AbstractProcessor {
 
-  public static final PropertyDescriptor SCOPE_ID =
-      new PropertyDescriptor.Builder()
-          .name("k.LAB scope ID")
-          .description(
-              "The ID of an existing and accessible scope. If not specified, the main user scope is used")
-          .required(false)
-          .build();
-
   public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
           .name("klab-controller-service")
@@ -102,6 +94,7 @@ public class MessageRelayProcessor extends AbstractProcessor {
   @Override
   public void onTrigger(final ProcessContext context, final ProcessSession session)
       throws ProcessException {
+
     if (!isRunning) {
       return;
     }
