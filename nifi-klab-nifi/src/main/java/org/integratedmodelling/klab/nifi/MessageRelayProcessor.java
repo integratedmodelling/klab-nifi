@@ -1,41 +1,41 @@
 package org.integratedmodelling.klab.nifi;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnShutdown;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.runtime.Channel;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Receive messages from the currently configured scope and relay them as output. Should be
  * configurable with queue/message filters and scope IDs.
  */
-@Tags({"k.LAB", "TODO"})
-@SupportsBatching
+@Tags({"k.LAB", "source", "event-driven"})
+@CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
-@CapabilityDescription("TODO")
 public class MessageRelayProcessor extends AbstractProcessor {
-
-  public static final PropertyDescriptor KLAB_SERVICE =
-      new PropertyDescriptor.Builder()
-          .name("k.LAB service controller")
-          .description("k.LAB service controller")
-          .identifiesControllerService(KlabController.class)
-          .required(true)
-          .build();
 
   public static final PropertyDescriptor SCOPE_ID =
       new PropertyDescriptor.Builder()
@@ -45,68 +45,110 @@ public class MessageRelayProcessor extends AbstractProcessor {
           .required(false)
           .build();
 
-  public static final Relationship SUCCESS = new Relationship.Builder().name("success").build();
+  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
+      new PropertyDescriptor.Builder()
+          .name("klab-controller-service")
+          .displayName("k.LAB Controller Service")
+          .description("The k.LAB Controller Service to receive events from")
+          .required(true)
+          .identifiesControllerService(KlabController.class)
+          .build();
 
-  public Set<Message.Queue> queues =
-      EnumSet.of(Message.Queue.Events, Message.Queue.Errors, Message.Queue.Status);
-  private String listenerId;
-  private Scope scope;
+  public static final Relationship REL_SUCCESS =
+      new Relationship.Builder()
+          .name("success")
+          .description("Successfully generated FlowFiles")
+          .build();
+
+  private static final List<PropertyDescriptor> DESCRIPTORS =
+      Arrays.asList(KLAB_CONTROLLER_SERVICE);
+
+  private static final Set<Relationship> RELATIONSHIPS = Collections.singleton(REL_SUCCESS);
+
+  private final BlockingQueue<EventData> eventQueue = new LinkedBlockingQueue<>();
+  private volatile boolean isRunning = false;
 
   @Override
-  protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
-    List<PropertyDescriptor> propDescs = new ArrayList<>();
-    propDescs.add(KLAB_SERVICE);
-    propDescs.add(SCOPE_ID);
-
-    // TODO add properties to choose queues and filter messages
-
-    return propDescs;
+  public Set<Relationship> getRelationships() {
+    return RELATIONSHIPS;
   }
 
   @Override
-  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-
-    var controller = context.getProperty(KLAB_SERVICE).asControllerService(KlabController.class);
-    var scopeId = context.getProperty(SCOPE_ID).getValue();
-
-    /*
-    use the controller to find the scope from the configuration. If nothing is configured we use the main user scope.
-     */
-    Scope scope = controller.getScope(UserScope.class);
-    if (scopeId != null) {
-      // TODO find the scope
-    }
-
-    this.scope = scope;
-
-    // TODO log, provenance
-
-    /*
-    install a listener to relay messages. Must be uninstalled on processor shutdown.
-     */
-    this.listenerId = scope.onMessage(this::processEvent, queues.toArray(new Message.Queue[0]));
-
-    /*
-    listener must filter messages based on configuration and output those that remain after filtering
-     */
-
+  public final List<PropertyDescriptor> getSupportedPropertyDescriptors() {
+    return DESCRIPTORS;
   }
 
-  private void processEvent(Channel channel, Message message) {
+  @OnScheduled
+  public void onScheduled(final ProcessContext context) {
+    final KlabController controllerService =
+        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
 
+    isRunning = true;
+    // Register as listener with the controller service
+    controllerService.addEventListener(this::handleEvent);
   }
 
   @OnStopped
-  public void onStopped(ProcessContext context) {
-    // TODO see if we should set an AtomicBoolean flag to ignore all messages or remove the
-    //  listener, to add it again when/if we are started again
+  public void onStopped(final ProcessContext context) {
+    isRunning = false;
+    final KlabController controllerService =
+        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
+
+    // Unregister listener
+    controllerService.removeEventListener(this::handleEvent);
+    eventQueue.clear();
   }
 
-  @OnShutdown
-  public void onShutdown() {
-    /*
-    remove the listener
-     */
-    this.scope.unregisterMessageListener(this.listenerId);
+  @Override
+  public void onTrigger(final ProcessContext context, final ProcessSession session)
+      throws ProcessException {
+    if (!isRunning) {
+      return;
+    }
+
+    // Poll for events with a timeout to avoid blocking indefinitely
+    EventData eventData = eventQueue.poll();
+    if (eventData == null) {
+      // No events available, yield to other processors
+      context.yield();
+      return;
+    }
+
+    try {
+      // Create FlowFile from event data
+      FlowFile flowFile = session.create();
+      flowFile =
+          session.write(
+              flowFile,
+              out -> {
+                // Write event data to FlowFile content
+                writeEventToStream(eventData, out);
+              });
+
+      // Add attributes from event
+      flowFile = session.putAllAttributes(flowFile, eventData.getAttributes());
+
+      session.transfer(flowFile, REL_SUCCESS);
+      session.commitAsync();
+
+    } catch (Exception e) {
+      getLogger().error("Failed to process event", e);
+      session.rollback();
+    }
+  }
+
+  private void handleEvent(EventData eventData) {
+    if (isRunning) {
+      try {
+        eventQueue.offer(eventData, 1, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        getLogger().warn("Interrupted while queuing event");
+      }
+    }
+  }
+
+  private void writeEventToStream(EventData eventData, OutputStream out) throws IOException {
+    out.write(Utils.Json.printAsJson(eventData.getPayload()).getBytes());
   }
 }

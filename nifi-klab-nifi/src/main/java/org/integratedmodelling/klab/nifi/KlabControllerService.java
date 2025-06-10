@@ -16,12 +16,13 @@
  */
 package org.integratedmodelling.klab.nifi;
 
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
-import org.apache.nifi.annotation.documentation.CapabilityDescription;
-import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
 import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -36,12 +37,19 @@ import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.KlabService;
+import org.integratedmodelling.klab.api.services.runtime.Channel;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 
-/** Logs a federated user into k.LAB and maintains a set of scopes for that user. */
-@Tags({"k.LAB"})
-@CapabilityDescription(
-    "Controller service providing a k.LAB user scope and federation-wide messaging facilities")
+/**
+ * The <code>KlabControllerService</code> is required by all k.LAB processors and is responsible for
+ * establishing connection to k.LAB and setting up the scope of interest, which can be a UserScope,
+ * a SessionScope or a ContextScope according to configuration.
+ *
+ * <p>The controller logs a federated user into k.LAB upon creation, sets up the target scope based
+ * on configuration, and translates events from the scope into NiFi-consumable {@link
+ * org.apache.nifi.flowfile.FlowFile}s, which other processors can consume.
+ */
+
 public class KlabControllerService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
@@ -79,12 +87,28 @@ public class KlabControllerService extends AbstractControllerService implements 
     return properties;
   }
 
-  /**
-   * @param context the configuration context
-   * @throws InitializationException if unable to create a k.LAB connection
-   */
+  private void updateServiceStatus(KlabService service, KlabService.ServiceStatus serviceStatus) {
+    // TODO keep tabs on all available services and their status
+  }
+
+  private void updateEngineStatus(Engine.Status status) {
+    // TODO update and log what needed
+  }
+
+  @Override
+  public Scope getScope(Class<? extends Scope> scopeClass) {
+    // TODO check if scope is configured for this user. If not, a default session scope and context
+    //  scope can be created when the correspondent classes are requested.
+    return this.configuredScope;
+  }
+
+  // Add listener management
+  private final Set<Consumer<EventData>> eventListeners = ConcurrentHashMap.newKeySet();
+  private final ExecutorService eventExecutor = Executors.newCachedThreadPool();
+
   @OnEnabled
   public void onEnabled(final ConfigurationContext context) throws InitializationException {
+    // ... existing code ...
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
     // TODO find certificate through properties
     this.userScope = engine.authenticate();
@@ -104,27 +128,72 @@ public class KlabControllerService extends AbstractControllerService implements 
     }
     this.engine.boot();
     this.configuredScope = this.userScope;
+
     // TODO check properties for a DT URL or ID
-    // TODO install overall message router as a listener
-  }
+    // TODO install overall message router as a listener for errors or other loggable conditions
 
-  private void updateServiceStatus(KlabService service, KlabService.ServiceStatus serviceStatus) {
-    // TODO keep tabs on all available services and their status
-  }
-
-  private void updateEngineStatus(Engine.Status status) {
-    // TODO update and log what needed
+    // Set up message listener for the configured scope
+    if (this.configuredScope != null) {
+      setupMessageListener();
+    }
   }
 
   @OnDisabled
   public void shutdown() {
-    // TODO remove all listeners
+    eventListeners.clear();
+    eventExecutor.shutdown();
+    try {
+      if (!eventExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+        eventExecutor.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      eventExecutor.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
   }
 
   @Override
-  public Scope getScope(Class<? extends Scope> scopeClass) {
-    // TODO check if scope is configured for this user. If not, a default session scope and context
-    //  scope can be created when the correspondent classes are requested.
-    return this.configuredScope;
+  public void addEventListener(Consumer<EventData> listener) {
+    eventListeners.add(listener);
+  }
+
+  @Override
+  public void removeEventListener(Consumer<EventData> listener) {
+    eventListeners.remove(listener);
+  }
+
+  private void setupMessageListener() {
+    // This would depend on your k.LAB API for message listening
+    configuredScope.onMessage(this::handleKlabMessage, queues.toArray(new Message.Queue[0]));
+  }
+
+  private void handleKlabMessage(Channel scope, Message message) {
+
+    // Convert k.LAB message to EventData
+    EventData eventData = convertMessageToEventData(message);
+
+    // Notify all registered listeners asynchronously
+    eventListeners.forEach(
+        listener ->
+            eventExecutor.submit(
+                () -> {
+                  try {
+                    listener.accept(eventData);
+                  } catch (Exception e) {
+                    getLogger().error("Error notifying event listener", e);
+                  }
+                }));
+  }
+
+  private EventData convertMessageToEventData(Message message) {
+
+    Map<String, String> attributes = new HashMap<>();
+    attributes.put("message.type", message.getMessageType().toString());
+    attributes.put("message.class", message.getMessageClass().toString());
+    attributes.put("message.queue", message.getQueue().toString());
+    attributes.put("message.timestamp", String.valueOf(message.getTimestamp()));
+    // Add other relevant attributes
+
+    return new EventData(message.getPayload(message.getMessageType().payloadClass), attributes);
   }
 }
