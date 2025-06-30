@@ -26,8 +26,8 @@ import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /**
  * Submit observations (unresolved or resolved through adapter metadata) and output their
- * resolved/accepted version. Also output any related events through a specific relationship. Only
- * works if the dataflow is tuned on a digital twin scope.
+ * resolved/accepted version. tAlso output any related events through the `events` relationship.
+ * Only works if the dataflow is tuned on a digital twin scope.
  *
  * <p>TODO configure to filter for observables, scope, geometry etc.
  */
@@ -61,7 +61,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
 
   public static final Relationship REL_EVENTS =
       new Relationship.Builder()
-          .name("original")
+          .name("events")
           .description(
               "Events originating from the digital twin during observation resolution"
                   + " and contextualization")
