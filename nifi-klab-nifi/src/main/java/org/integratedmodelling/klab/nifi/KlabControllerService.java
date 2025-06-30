@@ -39,6 +39,7 @@ import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.KlabService;
 import org.integratedmodelling.klab.api.services.runtime.Channel;
 import org.integratedmodelling.klab.api.services.runtime.Message;
+import org.integratedmodelling.klab.api.utils.Utils;
 
 /**
  * The <code>KlabControllerService</code> is required by all k.LAB processors and is responsible for
@@ -61,6 +62,15 @@ public class KlabControllerService extends AbstractControllerService implements 
           .addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
+  public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
+      new PropertyDescriptor.Builder()
+          .name("URL")
+          .displayName("Digital Twin URL")
+          .description("The URL for the digital twin to connect to")
+          .required(false)
+          .addValidator(StandardValidators.URL_VALIDATOR)
+          .build();
+
   public static final PropertyDescriptor DEFAULT_QUEUES =
       new PropertyDescriptor.Builder()
           .name("default-queues")
@@ -73,7 +83,7 @@ public class KlabControllerService extends AbstractControllerService implements 
           .build();
 
   private static final List<PropertyDescriptor> properties =
-      List.of(CERTIFICATE_PROPERTY, DEFAULT_QUEUES);
+      List.of(CERTIFICATE_PROPERTY, DIGITAL_TWIN_URL_PROPERTY, DEFAULT_QUEUES);
 
   private Engine engine;
   private UserScope userScope;
@@ -129,7 +139,15 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine.boot();
     this.configuredScope = this.userScope;
 
-    // TODO check properties for a DT URL or ID
+    /*
+     * Connect to a digital twin if one is specified. The default behavior is to create the DT if not existing.
+     * TODO also enable full parametric definition with the DT's configuration
+     */
+    String dtUrl = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
+    if (dtUrl != null && !dtUrl.isEmpty() && this.userScope != null) {
+      this.configuredScope = this.userScope.connect(Utils.URLs.newURL(dtUrl));
+    }
+
     // TODO install overall message router as a listener for errors or other loggable conditions
 
     // Set up a message listener for the configured scope
