@@ -32,6 +32,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.integratedmodelling.common.authentication.Authentication;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
+import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
 import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
@@ -127,9 +128,9 @@ public class KlabControllerService extends AbstractControllerService implements 
           "Unable to authenticate to k.LAB. Authentication is required for operation.");
     }
     this.federation =
-        this.userScope == null
+            this.userScope == null
             ? null
-            : Authentication.INSTANCE.getFederationData(this.userScope.getUser());
+            : Klab.INSTANCE.getFederationData(this.userScope.getUser());
     if (federation == null) {
       getLogger()
           .warn(
