@@ -12,7 +12,7 @@
     <parent>
         <groupId>org.integratedmodelling</groupId>
         <artifactId>klab-nifi</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>nifi-klab-nifi</artifactId>
@@ -27,7 +27,7 @@
         <dependency>
             <groupId>org.integratedmodelling</groupId>
             <artifactId>nifi-klab-nifi-api</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
