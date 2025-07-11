@@ -5,27 +5,12 @@ pipeline {
     environment {
         TAG = "${env.BRANCH_NAME.replace('/','-')}"
         MAVEN_OPTS="-Xmx1g"
-        //MINIO_HOST = "http://192.168.250.150:9000"
-        //MINIO_CREDENTIALS = "jenkins-ci-minio"
         REGISTRY = "registry.integratedmodelling.org"
         REGISTRY_CREDENTIALS = "registry-jenkins-credentials"
 
         VERSION_DATE = sh(
                     script: "date '+%Y-%m-%dT%H:%M:%S'",
                     returnStdout: true).trim()
-        /*
-        RESOURCES_CONTAINER = "resources-service-21"
-        RESOURCE_SERVICE = "resources"
-        RUNTIME_CONTAINER = "runtime-service-21"
-        RUNTIME_SERVICE = "runtime"
-        RESOLVER_CONTAINER = "resolver-service-21"
-        RESOLVER_SERVICE = "resolver"
-        REASONER_CONTAINER = "reasoner-service-21"
-        REASONER_SERVICE = "reasoner"
-        BASE_CONTAINER = "klab-base-21:dd2b778c852f20ad9c82fe6e12d5723e23e3dd19"
-        */
-        //DOCKER_HOST = "192.168.250.215"
-        //DOCKER_STACK = "klab"
     }
     stages {
         stage('Build') {
