@@ -42,11 +42,6 @@
                     <skip>true</skip>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>com.google.cloud.tools</groupId>
-                <artifactId>jib-maven-plugin</artifactId>
-                <version>3.3.1</version>  <!-- Usa la versión estable más reciente -->
-            </plugin>
         </plugins>
     </build>
 
