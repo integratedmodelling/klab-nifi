@@ -53,9 +53,9 @@ pipeline {
             }
         }
         stage('Deploy artifacts') {
-            when {
+            /*when {
                 anyOf { branch 'develop'; branch 'master' }
-            }
+            }*/
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-im-communication', keyFileVariable: 'identity')]) {
                     sh './mvnw --projects nifi-klab-nifi-api-nar javadoc:javadoc'
