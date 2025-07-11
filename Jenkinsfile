@@ -1,9 +1,3 @@
-properties([
-  pipelineTriggers([
-    githubPush()
-  ])
-])
-
 pipeline {
     agent {
         label 'maven-3-9-5-eclipse-temurin-21'
@@ -44,15 +38,15 @@ pipeline {
         }
         stage('Install') {
             steps {
-               script {
+               //script {
                    //jibBuild = 'jib:build -Djib.httpTimeout=180000'
                    //dockerBuild = sh(script: "git log -1 --pretty=%B | grep -qi '\\[docker build\\]'", returnStatus: true)
                    //env.JIB = (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop' || dockerBuild == 0) ? jibBuild : ''
-                   env.JIB = ''
-               }
+                   //env.JIB = ''
+               //}
                echo "${env.BRANCH_NAME} build with container tag: ${env.TAG}"
                withCredentials([usernamePassword(credentialsId: "${env.REGISTRY_CREDENTIALS}", passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
-                   sh "./mvnw clean source:jar install -DskipTests -U ${env.JIB}"
+                   sh "./mvnw clean source:jar install -DskipTests -U
                }
             }
         }
