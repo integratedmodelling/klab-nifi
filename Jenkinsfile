@@ -24,8 +24,8 @@ pipeline {
         REASONER_SERVICE = "reasoner"
         BASE_CONTAINER = "klab-base-21:dd2b778c852f20ad9c82fe6e12d5723e23e3dd19"
         */
-        DOCKER_HOST = "192.168.250.215"
-        DOCKER_STACK = "klab"
+        //DOCKER_HOST = "192.168.250.215"
+        //DOCKER_STACK = "klab"
     }
     stages {
         stage('Build') {
@@ -38,12 +38,6 @@ pipeline {
         }
         stage('Install') {
             steps {
-               //script {
-                   //jibBuild = 'jib:build -Djib.httpTimeout=180000'
-                   //dockerBuild = sh(script: "git log -1 --pretty=%B | grep -qi '\\[docker build\\]'", returnStatus: true)
-                   //env.JIB = (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop' || dockerBuild == 0) ? jibBuild : ''
-                   //env.JIB = ''
-               //}
                echo "${env.BRANCH_NAME} build with container tag: ${env.TAG}"
                withCredentials([usernamePassword(credentialsId: "${env.REGISTRY_CREDENTIALS}", passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
                    sh "./mvnw clean source:jar install -DskipTests -U "
@@ -51,9 +45,9 @@ pipeline {
             }
         }
         stage('Deploy artifacts') {
-            /*when {
+            when {
                 anyOf { branch 'develop'; branch 'master' }
-            }*/
+            }
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-im-communication', keyFileVariable: 'identity')]) {
                     sh './mvnw --projects nifi-klab-nifi-api-nar javadoc:javadoc'
