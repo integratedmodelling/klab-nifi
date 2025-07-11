@@ -46,7 +46,7 @@ pipeline {
                //}
                echo "${env.BRANCH_NAME} build with container tag: ${env.TAG}"
                withCredentials([usernamePassword(credentialsId: "${env.REGISTRY_CREDENTIALS}", passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
-                   sh "./mvnw clean source:jar install -DskipTests -U
+                   sh "./mvnw clean source:jar install -DskipTests -U "
                }
             }
         }
