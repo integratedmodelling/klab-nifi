@@ -42,6 +42,9 @@ pipeline {
                       export JAVA_HOME=/home/bc3/.sdkman/candidates/java/21.0.7-tem
                       export PATH=$JAVA_HOME/bin:$PATH
                       /home/bc3/nifi/bin/nifi.sh restart
+                      /home/bc3/nifi/bin/nifi.sh stop
+                      sleep 5
+                      nohup ${remoteHome}/nifi/bin/nifi.sh start > /dev/null 2>&1 &
                     '
                     '''
 
