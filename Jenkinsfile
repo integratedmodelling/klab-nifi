@@ -44,7 +44,7 @@ pipeline {
                       /home/bc3/nifi/bin/nifi.sh restart
                       /home/bc3/nifi/bin/nifi.sh stop
                       sleep 5
-                      nohup ${remoteHome}/nifi/bin/nifi.sh start > /dev/null 2>&1 &
+                      nohup /home/bc3/nifi/bin/nifi.sh start > /dev/null 2>&1 &
                     '
                     '''
 
