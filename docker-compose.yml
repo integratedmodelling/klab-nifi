@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+  nifi:
+    image: apache/nifi:latest
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./custom-nars:/opt/nifi/custom-nars
+      - C:\Users\arnab.moitra\Desktop\NIFI_Tests\nifi_input:/opt/nifi/input
+      - C:\Users\arnab.moitra\Desktop\NIFI_Tests\nifi_output:/opt/nifi/output
+      #      - C:\Users\arnab.moitra\Desktop\klab-integration.cert:/home/nifi/.klab/klab.cert
+      - C:\Users\arnab.moitra\.klab:/home/nifi/.klab
+
+    entrypoint: >
+      bash -c "
+        echo 'Copying custom NARs to lib...' &&
+        cp /opt/nifi/custom-nars/*.nar /opt/nifi/nifi-current/lib/ &&
+        echo 'Starting NiFi...' &&
+        /opt/nifi/scripts/start.sh
+      "
+      

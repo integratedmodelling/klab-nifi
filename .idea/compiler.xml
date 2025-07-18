@@ -12,5 +12,15 @@
         <module name="nifi-klab-nifi-nar" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="klab.controller" target="1.7" />
+      <module name="klab.processor" target="1.7" />
+      <module name="nifi-klab.controller" target="21" />
+      <module name="nifi-klab.controller-api" target="21" />
+      <module name="nifi-klab.controller-api-nar" target="21" />
+      <module name="nifi-klab.controller-nar" target="21" />
+      <module name="nifi-klab.processor-nar" target="21" />
+      <module name="nifi-klab.processor-processors" target="21" />
+    </bytecodeTargetLevel>
   </component>
 </project>

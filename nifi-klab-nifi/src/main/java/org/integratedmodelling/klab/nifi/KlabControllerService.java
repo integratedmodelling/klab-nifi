@@ -60,7 +60,7 @@ public class KlabControllerService extends AbstractControllerService implements 
           .displayName("k.LAB Certificate")
           .description("The URL for the k.LAB certificate to use for authentication")
           .required(false)
-          .addValidator(StandardValidators.URL_VALIDATOR)
+          //.addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
   public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
@@ -69,7 +69,7 @@ public class KlabControllerService extends AbstractControllerService implements 
           .displayName("Digital Twin URL")
           .description("The URL for the digital twin to connect to")
           .required(false)
-          .addValidator(StandardValidators.URL_VALIDATOR)
+          //.addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
   public static final PropertyDescriptor DEFAULT_QUEUES =
@@ -80,7 +80,7 @@ public class KlabControllerService extends AbstractControllerService implements 
               "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
                   + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
           .required(false)
-          .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+          //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
           .build();
 
   private static final List<PropertyDescriptor> properties =
