@@ -36,7 +36,8 @@ pipeline {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'jenkins-im-communication', keyFileVariable: 'identity')]) {
                     sh './mvnw --projects nifi-klab-nifi-api-nar javadoc:javadoc'
-                    sh 'rsync --archive --progress --delete --rsh="ssh -i ${identity} -o StrictHostKeyChecking=no" nifi-klab-nifi-api-nar/target/nifi-klab-nifi-api-nar-1.0.0-SNAPSHOT.nar bc3@192.168.250.147:/home/bc3/nifi/lib/'
+                    sh 'rsync --archive --progress --delete --rsh="ssh -i ${identity} -o StrictHostKeyChecking=no" nifi-klab-nifi-api-nar/target/nifi-klab-nifi-api-nar-1.0.0-SNAPSHOT.nar bc3@192.168.250.147:/home/bc3/nifi/lib/ \
+                        && nifi-klab-nifi-nar/target/nifi-klab-nifi-1.0.0-SNAPSHOT.nar'
                     sh '''
                     ssh -i ${identity} -o StrictHostKeyChecking=no bc3@192.168.250.147 '
                       export JAVA_HOME=/home/bc3/.sdkman/candidates/java/21.0.7-tem

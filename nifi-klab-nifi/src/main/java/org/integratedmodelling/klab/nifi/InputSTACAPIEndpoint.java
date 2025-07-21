@@ -45,7 +45,7 @@ public class InputSTACAPIEndpoint  extends AbstractProcessor {
             .description("Handle to k.LAB Digital Twin to Control, Manipulate and Update the Digital Twin in a Collaborative Fashion")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .identifiesControllerService(KlabControllerService.class)
+            .identifiesControllerService(KlabController.class)
             .build();
 
 
