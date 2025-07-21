@@ -38,7 +38,7 @@ pipeline {
                     sh './mvnw --projects nifi-klab-nifi-api-nar javadoc:javadoc'
                     sh 'rsync --archive --progress --delete --rsh="ssh -i ${identity} -o StrictHostKeyChecking=no" \
                             nifi-klab-nifi-api-nar/target/nifi-klab-nifi-api-nar-1.0.0-SNAPSHOT.nar \
-                            nifi-klab-nifi-nar/target/nifi-klab-nifi-1.0.0-SNAPSHOT.nar \
+                            nifi-klab-nifi-nar/target/nifi-klab-nifi-nar-1.0.0-SNAPSHOT.nar \
                             bc3@192.168.250.147:/home/bc3/nifi/lib/'
                     sh '''
                     ssh -i ${identity} -o StrictHostKeyChecking=no bc3@192.168.250.147 '
