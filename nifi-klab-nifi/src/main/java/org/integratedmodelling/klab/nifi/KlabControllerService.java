@@ -68,8 +68,8 @@ public class KlabControllerService extends AbstractControllerService implements 
           .name("URL")
           .displayName("Digital Twin URL")
           .description("The URL for the digital twin to connect to")
-          .required(false)
-          //.addValidator(StandardValidators.URL_VALIDATOR)
+          .required(true)
+          .addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
   public static final PropertyDescriptor DEFAULT_QUEUES =
@@ -80,7 +80,7 @@ public class KlabControllerService extends AbstractControllerService implements 
               "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
                   + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
           .required(false)
-          //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+              //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
           .build();
 
   private static final List<PropertyDescriptor> properties =
@@ -145,6 +145,7 @@ public class KlabControllerService extends AbstractControllerService implements 
      * TODO also enable full parametric definition with the DT's configuration
      */
     String dtUrl = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
+    getLogger().info("DT URL: " + dtUrl);
     if (dtUrl != null && !dtUrl.isEmpty() && this.userScope != null) {
       this.configuredScope = this.userScope.connect(Utils.URLs.newURL(dtUrl));
     }
@@ -155,6 +156,8 @@ public class KlabControllerService extends AbstractControllerService implements 
     if (this.configuredScope != null) {
       setupMessageListener();
     }
+
+    getLogger().info("Controller Enabled Successfully, connecting to DT URL: " + dtUrl);
   }
 
   @OnDisabled

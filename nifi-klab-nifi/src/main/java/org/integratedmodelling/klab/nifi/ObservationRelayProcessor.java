@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.annotation.lifecycle.OnAdded;
+import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -26,7 +28,7 @@ import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /**
  * Submit observations (unresolved or resolved through adapter metadata) and output their
- * resolved/accepted version. tAlso output any related events through the `events` relationship.
+ * resolved/accepted version. Also output any related events through the `events` relationship.
  * Only works if the dataflow is tuned on a digital twin scope.
  *
  * <p>TODO configure to filter for observables, scope, geometry etc.
@@ -88,6 +90,10 @@ public class ObservationRelayProcessor extends AbstractProcessor {
   }
 
   @OnScheduled
+  /*
+    The first call after the basic Validations are passed, it gets the Scope from the Controller Service
+    it needs to interact and relay the observations as required
+   */
   public void initializeScope(final ProcessContext context) {
     isRunning = true;
     klabController =
@@ -99,6 +105,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       getLogger().error("No ContextScope available from the KlabController");
     }
   }
+
 
   @OnStopped
   public void cleanup() {
