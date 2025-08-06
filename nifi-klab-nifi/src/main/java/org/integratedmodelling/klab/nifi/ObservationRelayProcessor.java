@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnAdded;
@@ -126,18 +127,27 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
+    AtomicReference<Observation> observationRef = new AtomicReference<>();
+
+    try {
+      session.read(flowFile, in -> {
+        Observation obs = Utils.Json.load(in, Observation.class);
+        observationRef.set(obs);
+      });
+    } catch (Exception e) {
+      getLogger().error("Error reading observation from FlowFile", e);
+      session.transfer(flowFile, REL_FAILURE);
+      return;
+    }
+
+    Observation observation = observationRef.get();
+    if (observation == null) {
+      session.transfer(flowFile, REL_FAILURE);
+      return;
+    }
+
     try {
       // Read the incoming FlowFile as an Observation
-      session.read(
-          flowFile,
-          in -> {
-            var observation = Utils.Json.load(in, Observation.class);
-            if (observation == null) {
-              session.transfer(flowFile, REL_FAILURE);
-              return;
-            }
-
-            // TODO add listener
 
             // Submit the observation to the context scope
             var future =
@@ -184,7 +194,6 @@ public class ObservationRelayProcessor extends AbstractProcessor {
                           // TODO remove listener
                           return resolvedObservation;
                         });
-          });
     } catch (Exception e) {
       getLogger().error("Error processing observation", e);
       session.transfer(flowFile, REL_FAILURE);

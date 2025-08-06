@@ -122,21 +122,16 @@ public class FileWriteProcessor extends AbstractProcessor {
             return;
         }
 
-        String fileToWrite = context.getProperty("STAC Results WriteFile Location").getValue();
+        String fileToWrite = context.getProperty(PROPERTY_FILE_LOC).getValue();
         if (fileToWrite == null) {
             System.out.println("File to Write is found to be Null");
             session.transfer(flowFile, REL_FAILURE);
         } else {
-            String stacURL = flowFile.getAttribute("stac.url");
-            String stacURLPingResult = flowFile.getAttribute("stac.result");
+            String obsId = flowFile.getAttribute("observation.id");
+            String obsType = flowFile.getAttribute("observation.type");
 
-            String lineToAppend = stacURL + " Was Pinged";
-
-            if (stacURLPingResult.equals("true")) {
-                lineToAppend += " Successfully :)";
-            } else {
-                lineToAppend += " Unsuccessfully :(";
-            }
+            String lineToAppend = "Observation Type: " + obsType
+                    + ", Observation ID: " + obsId;
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileToWrite, true))) {
                 writer.write(lineToAppend);
