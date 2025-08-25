@@ -15,15 +15,25 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.integratedmodelling.common.knowledge.ObservableImpl;
+import org.integratedmodelling.klab.api.collections.Pair;
+import org.integratedmodelling.klab.api.data.Metadata;
+import org.integratedmodelling.klab.api.data.mediation.Currency;
+import org.integratedmodelling.klab.api.data.mediation.NumericRange;
+import org.integratedmodelling.klab.api.data.mediation.Unit;
+import org.integratedmodelling.klab.api.data.mediation.ValueMediator;
 import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.Locator;
-import org.integratedmodelling.klab.api.knowledge.Observable;
+import org.integratedmodelling.klab.api.knowledge.*;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.lang.Annotation;
 import org.integratedmodelling.klab.api.scope.ContextScope;
+import org.integratedmodelling.klab.api.scope.Scope;
 
 
 @Tags({"k.LAB", "source", "event-driven"})
@@ -98,7 +108,8 @@ public class ObservationFlowFileInit extends AbstractProcessor {
         }
 
         if (contextScope == null) {
-
+            getLogger().error("Context Scope from k.LAB Controller Service is null");
+            return;
         }
 
         flowFile = session.write(flowFile, new OutputStreamCallback() {
@@ -110,82 +121,7 @@ public class ObservationFlowFileInit extends AbstractProcessor {
                 String json = null;
                 ObservationImpl obs = DigitalTwin.createObservation(
                         contextScope,
-                        new Geometry() {
-                            @Override
-                            public String encode(Encoder... encoders) {
-                                return "";
-                            }
-
-                            @Override
-                            public String key() {
-                                return "";
-                            }
-
-                            @Override
-                            public boolean isGeneric() {
-                                return false;
-                            }
-
-                            @Override
-                            public List<Dimension> getDimensions() {
-                                return List.of();
-                            }
-
-                            @Override
-                            public Dimension dimension(Dimension.Type type) {
-                                return null;
-                            }
-
-                            @Override
-                            public Granularity getGranularity() {
-                                return null;
-                            }
-
-                            @Override
-                            public boolean isEmpty() {
-                                return false;
-                            }
-
-                            @Override
-                            public boolean isUniversal() {
-                                return false;
-                            }
-
-                            @Override
-                            public boolean isScalar() {
-                                return false;
-                            }
-
-                            @Override
-                            public long size() {
-                                return 0;
-                            }
-
-                            @Override
-                            public Geometry at(Locator dimension) {
-                                return null;
-                            }
-
-                            @Override
-                            public long[] getExtentOffsets() {
-                                return new long[0];
-                            }
-
-                            @Override
-                            public List<Geometry> split() {
-                                return List.of();
-                            }
-
-                            @Override
-                            public boolean infiniteTime() {
-                                return false;
-                            }
-
-                            @Override
-                            public <T extends Locator> T as(Class<T> cls) {
-                                return null;
-                            }
-                        }
+                        new ObservableImpl()
                 );
                 try {
                     json = objectMapper.writeValueAsString(obs);

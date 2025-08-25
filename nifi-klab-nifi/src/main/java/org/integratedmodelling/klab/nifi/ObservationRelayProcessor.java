@@ -2,15 +2,27 @@ package org.integratedmodelling.klab.nifi;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.Flow;
 import java.util.function.Consumer;
+
+import org.integratedmodelling.common.knowledge.ConceptImpl;
+import org.integratedmodelling.common.knowledge.ObservableImpl;
+import org.integratedmodelling.klab.api.collections.Pair;
+import org.integratedmodelling.klab.api.data.Metadata;
+import org.integratedmodelling.klab.api.data.mediation.Currency;
+import org.integratedmodelling.klab.api.data.mediation.NumericRange;
+import org.integratedmodelling.klab.api.data.mediation.Unit;
+import org.integratedmodelling.klab.api.data.mediation.ValueMediator;
+import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.knowledge.*;
+import org.apache.nifi.flowfile.FlowFile;
+import org.integratedmodelling.klab.api.knowledge.Observable;
+import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.nifi.annotation.lifecycle.OnAdded;
 import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -24,7 +36,9 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
+import org.integratedmodelling.klab.api.lang.Annotation;
 import org.integratedmodelling.klab.api.scope.ContextScope;
+import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /**
@@ -122,17 +136,22 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
+//      FlowFile flowFile = session.create();
+
     FlowFile flowFile = session.get();
     if (flowFile == null) {
+      getLogger().error("Flowfile is null.. :)))");
       return;
     }
 
-    AtomicReference<Observation> observationRef = new AtomicReference<>();
+    AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
 
     try {
       session.read(flowFile, in -> {
-        Observation obs = Utils.Json.load(in, Observation.class);
+        ObjectMapper objMap = new ObjectMapper();
+        ObservationImpl obs = objMap.readValue(in, ObservationImpl.class);
         observationRef.set(obs);
+        getLogger().info("Read some observation...");
       });
     } catch (Exception e) {
       getLogger().error("Error reading observation from FlowFile", e);
@@ -141,13 +160,14 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     }
 
     Observation observation = observationRef.get();
+
     if (observation == null) {
+      getLogger().error("Found the observation to be null...");
       session.transfer(flowFile, REL_FAILURE);
       return;
     }
 
     try {
-      // Read the incoming FlowFile as an Observation
 
             // Submit the observation to the context scope
             var future =
@@ -157,6 +177,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
                         throwable -> {
 
                           // Transfer to failure if resolution returned null
+                          getLogger().error(throwable.getMessage());
                           session.transfer(flowFile, REL_FAILURE);
                           // TODO remove listener
                           return observation;
