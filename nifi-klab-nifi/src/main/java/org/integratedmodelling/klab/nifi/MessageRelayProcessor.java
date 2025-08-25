@@ -16,6 +16,7 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.runtime.Channel;
@@ -37,14 +38,15 @@ import java.util.concurrent.TimeUnit;
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class MessageRelayProcessor extends AbstractProcessor {
 
-  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
-      new PropertyDescriptor.Builder()
-          .name("klab-controller-service")
-          .displayName("k.LAB Controller Service")
-          .description("The k.LAB Controller Service to receive events from")
-          .required(true)
-          .identifiesControllerService(KlabController.class)
-          .build();
+    // TODO this must be bound manually. See below for automated strategy. Not sure which is the best way.
+  //  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
+  //      new PropertyDescriptor.Builder()
+  //          .name("klab-controller-service")
+  //          .displayName("k.LAB Controller Service")
+  //          .description("The k.LAB Controller Service to receive events from")
+  //          .required(true)
+  //          .identifiesControllerService(KlabController.class)
+  //          .build();
 
   public static final Relationship REL_SUCCESS =
       new Relationship.Builder()
@@ -52,8 +54,8 @@ public class MessageRelayProcessor extends AbstractProcessor {
           .description("Successfully generated FlowFiles")
           .build();
 
-  private static final List<PropertyDescriptor> DESCRIPTORS =
-      Arrays.asList(KLAB_CONTROLLER_SERVICE);
+  private static final List<PropertyDescriptor> DESCRIPTORS = List.of();
+  //      Arrays.asList(KLAB_CONTROLLER_SERVICE);
 
   private static final Set<Relationship> RELATIONSHIPS = Collections.singleton(REL_SUCCESS);
 
@@ -72,8 +74,11 @@ public class MessageRelayProcessor extends AbstractProcessor {
 
   @OnScheduled
   public void onScheduled(final ProcessContext context) {
-    final KlabController controllerService =
-        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
+
+    // see below
+    var controllerService =
+        (KlabControllerService)
+            context.getControllerServiceLookup().getControllerService("klab-controller-service");
 
     isRunning = true;
     // Register as listener with the controller service
@@ -83,9 +88,15 @@ public class MessageRelayProcessor extends AbstractProcessor {
   @OnStopped
   public void onStopped(final ProcessContext context) {
     isRunning = false;
-    final KlabController controllerService =
-        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
 
+    // looks like this is not the way to do it, at least in test cases
+    //    final KlabController controllerService =
+    //        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
+
+    // this is way uglier but works. Can be done by finding the identifiers by class first. TODO check for null
+    var controllerService =
+        (KlabControllerService)
+            context.getControllerServiceLookup().getControllerService("klab-controller-service");
     // Unregister listener
     controllerService.removeEventListener(this::handleEvent);
     eventQueue.clear();

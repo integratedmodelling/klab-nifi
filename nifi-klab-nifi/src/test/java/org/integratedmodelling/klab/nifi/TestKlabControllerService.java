@@ -35,7 +35,7 @@ public class TestKlabControllerService {
 
     final TestRunner runner = TestRunners.newTestRunner(MessageRelayProcessor.class);
     final KlabControllerService service = new KlabControllerService();
-    runner.addControllerService("klab", service);
+    runner.addControllerService("klab-controller-service", service);
 
     // This is the default certificate location - passing it is not required
     File certificateFile =
@@ -52,5 +52,6 @@ public class TestKlabControllerService {
 
     runner.enableControllerService(service);
     runner.assertValid(service);
+    runner.run();
   }
 }
