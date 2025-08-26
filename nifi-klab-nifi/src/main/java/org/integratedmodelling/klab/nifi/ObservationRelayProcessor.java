@@ -1,30 +1,17 @@
 package org.integratedmodelling.klab.nifi;
 
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import org.integratedmodelling.common.knowledge.ConceptImpl;
-import org.integratedmodelling.common.knowledge.ObservableImpl;
-import org.integratedmodelling.klab.api.collections.Pair;
-import org.integratedmodelling.klab.api.data.Metadata;
-import org.integratedmodelling.klab.api.data.mediation.Currency;
-import org.integratedmodelling.klab.api.data.mediation.NumericRange;
-import org.integratedmodelling.klab.api.data.mediation.Unit;
-import org.integratedmodelling.klab.api.data.mediation.ValueMediator;
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
-import org.integratedmodelling.klab.api.knowledge.*;
-import org.apache.nifi.flowfile.FlowFile;
-import org.integratedmodelling.klab.api.knowledge.Observable;
-import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
-import java.util.concurrent.atomic.AtomicReference;
+import com.google.gson.*;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.nifi.annotation.lifecycle.OnAdded;
-import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -34,11 +21,15 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
+import org.integratedmodelling.klab.api.data.Metadata;
+import org.integratedmodelling.klab.api.knowledge.*;
+import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
-import org.integratedmodelling.klab.api.lang.Annotation;
+import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.scope.ContextScope;
-import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 
 /**
@@ -128,6 +119,26 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     eventConsumers.clear();
   }
 
+  class ObservableTypeAdapter implements JsonDeserializer<Observable> {
+    @Override
+    public Observable deserialize(
+        JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ObservableImpl.class);
+    }
+  }
+
+  class MetadataTypeAdapter implements JsonDeserializer<Metadata> {
+    @Override
+    public Metadata deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, MetadataImpl.class);
+    }
+  }
+
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
 
@@ -146,10 +157,13 @@ public class ObservationRelayProcessor extends AbstractProcessor {
 
     AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
 
+    final GsonBuilder builder = new GsonBuilder();
+    builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
+    builder.registerTypeAdapter(Metadata.class, new MetadataTypeAdapter());
+    Gson gson = builder.create();
     try {
       session.read(flowFile, in -> {
-        ObjectMapper objMap = new ObjectMapper();
-        ObservationImpl obs = objMap.readValue(in, ObservationImpl.class);
+        ObservationImpl obs = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), ObservationImpl.class);
         observationRef.set(obs);
         getLogger().info("Read some observation...");
       });

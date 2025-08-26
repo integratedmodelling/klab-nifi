@@ -1,7 +1,11 @@
 package org.integratedmodelling.klab.nifi;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.google.gson.Gson;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -13,28 +17,11 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
-import org.integratedmodelling.klab.api.collections.Pair;
-import org.integratedmodelling.klab.api.data.Metadata;
-import org.integratedmodelling.klab.api.data.mediation.Currency;
-import org.integratedmodelling.klab.api.data.mediation.NumericRange;
-import org.integratedmodelling.klab.api.data.mediation.Unit;
-import org.integratedmodelling.klab.api.data.mediation.ValueMediator;
-import org.integratedmodelling.klab.api.geometry.Geometry;
-import org.integratedmodelling.klab.api.geometry.Locator;
+import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.knowledge.*;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
-import org.integratedmodelling.klab.api.lang.Annotation;
 import org.integratedmodelling.klab.api.scope.ContextScope;
-import org.integratedmodelling.klab.api.scope.Scope;
-
 
 @Tags({"k.LAB", "source", "event-driven"})
 @CapabilityDescription("Generates FlowFiles for the Observation Relay Processor")
@@ -117,17 +104,12 @@ public class ObservationFlowFileInit extends AbstractProcessor {
             public void process(OutputStream out) {
                 String content = "Hello from custom processor!";
                 String jsonStr = "{\"status\":\"ok\", \"message\":\"Hello\"}";
-                ObjectMapper objectMapper = new ObjectMapper();
-                String json = null;
                 ObservationImpl obs = DigitalTwin.createObservation(
                         contextScope,
                         new ObservableImpl()
                 );
-                try {
-                    json = objectMapper.writeValueAsString(obs);
-                } catch (JsonProcessingException e) {
-                    throw new RuntimeException(e);
-                }
+                Gson gson = new Gson();
+                String json = gson.toJson(obs);
 
                 try {
                     out.write(json.getBytes(StandardCharsets.UTF_8));
