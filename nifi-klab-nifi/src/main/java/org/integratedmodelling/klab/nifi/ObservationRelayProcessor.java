@@ -1,5 +1,6 @@
 package org.integratedmodelling.klab.nifi;
 
+import com.google.gson.*;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -8,8 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-
-import com.google.gson.*;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -21,10 +20,15 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.integratedmodelling.common.knowledge.ConceptImpl;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.collections.Parameters;
 import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
+import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.data.Metadata;
+import org.integratedmodelling.klab.api.geometry.Geometry;
+import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.*;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
@@ -139,6 +143,36 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     }
   }
 
+  class ConceptTypeAdapter implements JsonDeserializer<Concept> {
+    @Override
+    public Concept deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ConceptImpl.class);
+    }
+  }
+
+  class GeometryTypeAdapter implements JsonDeserializer<Geometry> {
+    @Override
+    public Geometry deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, GeometryImpl.class);
+    }
+  }
+
+  class ParametersTypeAdapter implements JsonDeserializer<Parameters> {
+    @Override
+    public Parameters deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ParametersImpl.class);
+    }
+  }
+
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
 
@@ -160,6 +194,8 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     final GsonBuilder builder = new GsonBuilder();
     builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
     builder.registerTypeAdapter(Metadata.class, new MetadataTypeAdapter());
+    builder.registerTypeAdapter(Concept.class, new ConceptTypeAdapter());
+    builder.registerTypeAdapter(Geometry.class, new GeometryTypeAdapter());
     Gson gson = builder.create();
     try {
       session.read(flowFile, in -> {
@@ -223,6 +259,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
                               "observation.type", resolvedObservation.getType().toString());
                           successFlowFile = session.putAllAttributes(successFlowFile, attributes);
 
+                          getLogger().info("Success flowfile being sent");
                           // Transfer to success relationship
                           session.transfer(successFlowFile, REL_SUCCESS);
                           session.remove(flowFile);
