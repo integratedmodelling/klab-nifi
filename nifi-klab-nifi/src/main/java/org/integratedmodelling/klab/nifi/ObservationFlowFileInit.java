@@ -19,8 +19,11 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.*;
+import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
+import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 
 @Tags({"k.LAB", "source", "event-driven"})
@@ -99,26 +102,44 @@ public class ObservationFlowFileInit extends AbstractProcessor {
             return;
         }
 
-        flowFile = session.write(flowFile, new OutputStreamCallback() {
-            @Override
-            public void process(OutputStream out) {
-                String content = "Hello from custom processor!";
-                String jsonStr = "{\"status\":\"ok\", \"message\":\"Hello\"}";
-                ObservationImpl obs = DigitalTwin.createObservation(
-                        contextScope,
-                        new ObservableImpl()
-                );
+    flowFile =
+        session.write(
+            flowFile,
+            new OutputStreamCallback() {
+              @Override
+              public void process(OutputStream out) {
+
+                Observation observation = Observation.EMPTY_OBSERVATION;
+                ObservationImpl obs =
+                    DigitalTwin.createObservation(contextScope, new ObservableImpl());
+
+                var geom =
+                    GeometryImpl.builder()
+                        .space()
+                        .shape(
+                            "EPSG:4326 POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
+                        .resolution("1.km")
+                        .projection("EPSG:4326")
+                        .build()
+                        .time()
+                        .between(1325376000000L, 1356998400000L)
+                        .resolution(Time.Resolution.Type.YEAR, 1)
+                        .build();
+
+                obs.setGeometry(geom.build());
+                obs.setUrn("earth:Terrestrial earth:Region");
+
                 Gson gson = new Gson();
                 String json = gson.toJson(obs);
-
                 try {
-                    out.write(json.getBytes(StandardCharsets.UTF_8));
-                    getLogger().info("Wrote some stuff in the Nifi flowfile to push an observation...");
+                  out.write(json.getBytes(StandardCharsets.UTF_8));
+                  getLogger()
+                      .info("Wrote some stuff in the Nifi flowfile to push an observation...");
                 } catch (Exception e) {
-                    throw new ProcessException("Error writing content", e);
+                  throw new ProcessException("Error writing content", e);
                 }
-            }
-        });
+              }
+            });
 
         // Transfer FlowFile to success
         session.transfer(flowFile, REL_SUCCESS);

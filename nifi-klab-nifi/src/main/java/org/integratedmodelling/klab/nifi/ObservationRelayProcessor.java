@@ -196,6 +196,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     builder.registerTypeAdapter(Metadata.class, new MetadataTypeAdapter());
     builder.registerTypeAdapter(Concept.class, new ConceptTypeAdapter());
     builder.registerTypeAdapter(Geometry.class, new GeometryTypeAdapter());
+    builder.registerTypeAdapter(Parameters.class, new ParametersTypeAdapter());
     Gson gson = builder.create();
     try {
       session.read(flowFile, in -> {
