@@ -17,6 +17,7 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
+import org.integratedmodelling.common.knowledge.ConceptImpl;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
@@ -109,9 +110,11 @@ public class ObservationFlowFileInit extends AbstractProcessor {
               @Override
               public void process(OutputStream out) {
 
-                Observation observation = Observation.EMPTY_OBSERVATION;
-                ObservationImpl obs =
-                    DigitalTwin.createObservation(contextScope, new ObservableImpl());
+                  ConceptImpl ccpt = new ConceptImpl();
+                  ccpt.setUrn("earth:Terrestrial earth:Region");
+                  ccpt.setId(-1);
+
+                  ObservationImpl obs = DigitalTwin.createObservation(contextScope, new ObservableImpl(ccpt));
 
                 var geom =
                     GeometryImpl.builder()

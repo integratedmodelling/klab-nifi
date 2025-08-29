@@ -7,6 +7,8 @@ import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
@@ -181,8 +183,6 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
-//      FlowFile flowFile = session.create();
-
     FlowFile flowFile = session.get();
     if (flowFile == null) {
       getLogger().error("Flowfile is null.. :)))");
@@ -210,6 +210,7 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
+
     Observation observation = observationRef.get();
 
     if (observation == null) {
@@ -218,59 +219,33 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
-    try {
+    session.remove(flowFile); // remove the incoming flowfile, and create another one
 
-            // Submit the observation to the context scope
-            var future =
-                contextScope
-                    .submit(observation)
-                    .exceptionally(
-                        throwable -> {
+    FlowFile successFlowFile = session.create(flowFile);
 
-                          // Transfer to failure if resolution returned null
-                          getLogger().error(throwable.getMessage());
-                          session.transfer(flowFile, REL_FAILURE);
-                          // TODO remove listener
-                          return observation;
-                        })
-                    .thenApply(
-                        resolvedObservation -> {
-                          FlowFile successFlowFile = session.create(flowFile);
-                          successFlowFile =
-                              session.write(
-                                  successFlowFile,
-                                  out -> {
-                                    try {
-                                      // Serialize the resolved observation to the output stream
-                                      serializeObservation(resolvedObservation, out);
-                                    } catch (IOException e) {
-                                      getLogger()
-                                          .error(
-                                              "Failed to write resolved observation to FlowFile",
-                                              e);
-                                      throw new ProcessException("Failed to write observation", e);
-                                    }
-                                  });
+      try {
+        CompletableFuture<Observation> future = contextScope.submit(observation);
+        Observation resolvedObservation = future.get();
 
-                          // Add relevant attributes
-                          Map<String, String> attributes = new HashMap<>();
-                          // TODO
-                          attributes.put("observation.id", resolvedObservation.getId() + "");
-                          attributes.put(
-                              "observation.type", resolvedObservation.getType().toString());
-                          successFlowFile = session.putAllAttributes(successFlowFile, attributes);
+        session.write(successFlowFile, out ->{
+          serializeObservation(resolvedObservation, out);
+        });
 
-                          getLogger().info("Success flowfile being sent");
-                          // Transfer to success relationship
-                          session.transfer(successFlowFile, REL_SUCCESS);
-                          session.remove(flowFile);
-                          // TODO remove listener
-                          return resolvedObservation;
-                        });
-    } catch (Exception e) {
-      getLogger().error("Error processing observation", e);
-      session.transfer(flowFile, REL_FAILURE);
-    }
+        Map<String, String> attributes = new HashMap<>();
+
+        attributes.put("observation.id", resolvedObservation.getId() + "");
+        attributes.put("observation.type", resolvedObservation.getType().toString());
+
+        successFlowFile = session.putAllAttributes(successFlowFile, attributes);
+
+        getLogger().info("Success Flowfile being sent to Success Relation..");
+        session.transfer(successFlowFile, REL_SUCCESS);
+
+      } catch (Exception e) {
+        getLogger().error("Error in processing Observation: " , e);
+        getLogger().info("Routing Success Flowfile to Failure Rel");
+        session.transfer(successFlowFile, REL_FAILURE);
+      }
   }
 
   private void handleEventData(EventData eventData, ProcessSession session) {
