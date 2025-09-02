@@ -1,6 +1,8 @@
 package org.integratedmodelling.klab.nifi.utils;
 
 
+import com.google.gson.Gson;
+
 import java.util.Optional;
 
 public class KlabNifiInputRequest {
@@ -27,6 +29,11 @@ public class KlabNifiInputRequest {
     return this;
   }
 
+  public String requestToJson() {
+    return new Gson().toJson(this);
+  }
+
+
   public static class Builder {
     private String shape;
     private String sgrid;
@@ -36,28 +43,28 @@ public class KlabNifiInputRequest {
     private double extension;
     private String unit;
 
-    Builder setShape(String shape) {
+    public Builder setShape(String shape) {
       this.shape = shape;
       return this;
     }
 
-    Builder setSgrid(String sgrid) {
+    public Builder setSgrid(String sgrid) {
       this.sgrid = sgrid;
       return this;
     }
 
-    Builder setProjection(String projection) {
+    public Builder setProjection(String projection) {
       this.projection = Optional.of(projection);
       return this;
     }
 
-    Builder setTime(long start, long end) {
+    public Builder setTime(long start, long end) {
       this.start = start;
       this.end = end;
       return this;
     }
 
-    Builder setScope(double extension, String unit) {
+    public Builder setScope(double extension, String unit) {
       this.extension = extension;
       this.unit = unit;
       return this;
@@ -66,27 +73,14 @@ public class KlabNifiInputRequest {
     private String name;
     private String urn;
 
-    Builder setName(String name) {
+    public Builder setName(String name) {
       this.name = name;
       return this;
     }
 
-    Builder setUrn(String urn) {
+    public Builder setUrn(String urn) {
       this.urn = urn;
       return this;
     }
-  }
-
-  public static void main(String[] args) {
-    var requestBuilder = new KlabNifiInputRequest.Builder()
-        .setProjection("EPSG:4326")
-        .setShape(
-            "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
-        .setSgrid("1.km")
-        .setTime(1325376000000L, 1356998400000L)
-        .setScope(1.0, "year")
-        .setName("testing")
-            .setUrn("earth:Terrestrial earth:Region");
-    var request = new KlabNifiInputRequest().build(requestBuilder);
   }
 }

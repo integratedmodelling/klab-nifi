@@ -18,3 +18,4 @@ org.integratedmodelling.klab.nifi.STACEndpointPingProcessor
 org.integratedmodelling.klab.nifi.MessageRelayProcessor
 org.integratedmodelling.klab.nifi.ObservationRelayProcessor
 org.integratedmodelling.klab.nifi.ObservationFlowFileInit
+org.integratedmodelling.klab.nifi.KlabInputFromJavaExampleProcessor
