@@ -1,8 +1,8 @@
 package org.integratedmodelling.klab.nifi.utils;
 
-
-import com.google.gson.Gson;
-
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import java.util.Date;
 import java.util.Optional;
 
 public class KlabNifiInputRequest {
@@ -30,9 +30,48 @@ public class KlabNifiInputRequest {
   }
 
   public String requestToJson() {
-    return new Gson().toJson(this);
-  }
+    var ret = new JsonObject();
 
+    var observableJson = new JsonObject();
+    var semanticsJson = new JsonObject();
+    semanticsJson.addProperty("urn", this.urn);
+    var typeJson = new JsonArray();
+    typeJson.add("DIRECT_OBSERVABLE");
+    typeJson.add("COUNTABLE");
+    typeJson.add("SUBJECT");
+    typeJson.add("OBSERVABLE");
+    observableJson.addProperty("urn", this.urn);
+    observableJson.add("semantics", semanticsJson);
+    observableJson.addProperty("name", this.name);
+
+    var geometryJson = new JsonObject();
+    var dimensionsJson = new JsonArray();
+    var spaceJson = new JsonObject();
+    var timeJson = new JsonObject();
+
+    var spaceParamsJson = new JsonObject();
+    spaceParamsJson.addProperty("shape", String.format("%s %s ", this.projection, this.shape));
+    spaceParamsJson.addProperty("sgrid", this.sgrid);
+    spaceParamsJson.addProperty("proj", this.projection);
+    spaceJson.add("parameters", spaceParamsJson);
+
+    var timeParamsJson = new JsonObject();
+    timeParamsJson.addProperty("ttype", "PHYSICAL");
+    timeParamsJson.addProperty("tstart", this.start);
+    timeParamsJson.addProperty("tend", this.end);
+    timeParamsJson.addProperty("tscope", this.extension);
+    timeParamsJson.addProperty("tunit", this.unit);
+    timeJson.add("parameters", timeParamsJson);
+
+    dimensionsJson.add(spaceJson);
+    dimensionsJson.add(timeJson);
+    geometryJson.add("dimensions", dimensionsJson);
+
+    ret.add("observable", observableJson);
+    ret.add("geometry", geometryJson);
+    ret.addProperty("id", -1);
+    return ret.toString();
+  }
 
   public static class Builder {
     private String shape;
@@ -61,6 +100,12 @@ public class KlabNifiInputRequest {
     public Builder setTime(long start, long end) {
       this.start = start;
       this.end = end;
+      return this;
+    }
+
+    public Builder setTime(Date start, Date end) {
+      this.start = start.toInstant().toEpochMilli();
+      this.end = end.toInstant().toEpochMilli();
       return this;
     }
 
