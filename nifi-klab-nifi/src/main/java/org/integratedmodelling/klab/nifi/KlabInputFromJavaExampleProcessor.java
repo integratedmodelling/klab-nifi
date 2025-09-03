@@ -2,6 +2,8 @@ package org.integratedmodelling.klab.nifi;
 
 import java.util.List;
 import java.util.Set;
+
+import com.google.gson.Gson;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -12,6 +14,8 @@ import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
+
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 
 /** An example processor that builds a valid flowfile. */
 @Tags({"k.LAB", "source", "example"})
@@ -80,7 +84,6 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
       return;
     }
 
-    getLogger().warn("BUILDING REQUEST");
     var requestBuilder =
         new KlabNifiInputRequest.Builder()
             .setProjection("EPSG:4326")
@@ -91,8 +94,6 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
             .setScope(1.0, "year")
             .setName("testing")
             .setUrn("earth:Terrestrial earth:Region");
-    var request = new KlabNifiInputRequest().build(requestBuilder);
-    getLogger().warn("REQUEST: " + request);
     try {
       FlowFile flowFile = session.create();
       flowFile =
@@ -100,10 +101,11 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
               flowFile,
               out -> {
                 // Write event data to FlowFile content
-                out.write(request.requestToJson().getBytes());
+                out.write(new Gson().toJson(requestBuilder).getBytes());
               });
 
       // Add attributes from event
+      session.putAttribute(flowFile, KLAB_URN, "earth:Terrestrial earth:Region");
       session.transfer(flowFile, REL_SUCCESS);
       session.commitAsync();
 
