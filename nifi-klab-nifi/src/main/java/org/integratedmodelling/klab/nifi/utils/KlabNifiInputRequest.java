@@ -44,6 +44,15 @@ public class KlabNifiInputRequest {
     observableJson.add("semantics", semanticsJson);
     observableJson.addProperty("name", this.name);
 
+    var geometryJson = getJsonObject();
+
+    ret.add("observable", observableJson);
+    ret.add("geometry", geometryJson);
+    ret.addProperty("id", -1);
+    return ret.toString();
+  }
+
+  private JsonObject getJsonObject() {
     var geometryJson = new JsonObject();
     var dimensionsJson = new JsonArray();
     var spaceJson = new JsonObject();
@@ -66,11 +75,7 @@ public class KlabNifiInputRequest {
     dimensionsJson.add(spaceJson);
     dimensionsJson.add(timeJson);
     geometryJson.add("dimensions", dimensionsJson);
-
-    ret.add("observable", observableJson);
-    ret.add("geometry", geometryJson);
-    ret.addProperty("id", -1);
-    return ret.toString();
+    return geometryJson;
   }
 
   public static class Builder {

@@ -1,7 +1,6 @@
 package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
-import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -16,9 +15,9 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
+import org.integratedmodelling.klab.api.knowledge.KlabAsset;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.ResourcesService;
@@ -29,9 +28,6 @@ import org.integratedmodelling.klab.api.services.ResourcesService;
       description = "URN that references a valid k.LAB semantic concept.")
 })
 public class KlabUrnResolverProcessor extends AbstractProcessor {
-
-  //  // TODO make it use a UserScope
-  //  private volatile UserScope userScope;
   private volatile ContextScope contextScope;
   private volatile KlabController klabController;
 
@@ -95,8 +91,8 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
   class ObservableTypeAdapter implements JsonDeserializer<Observable> {
     @Override
     public Observable deserialize(
-            JsonElement json, Type typeOfT, JsonDeserializationContext context)
-            throws JsonParseException {
+        JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException {
       JsonObject jsonObject = json.getAsJsonObject();
       return context.deserialize(jsonObject, ObservableImpl.class);
     }
@@ -105,13 +101,18 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
     String urn = context.getProperty(PROPERTY_KLAB_URN).getValue();
-    getLogger().warn("URN" + urn);
 
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
     var solved = contextScope.getService(ResourcesService.class).resolve(urn, contextScope);
 
-    getLogger().warn(solved.toString());
-    var observable = solved.getResults().stream().findFirst().orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
+    var observable =
+        solved.getResults().stream()
+            .filter(
+                res -> {
+                  return res.getKnowledgeClass().equals(KlabAsset.KnowledgeClass.OBSERVABLE);
+                })
+            .findFirst()
+            .orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
 
     FlowFile flowFile = session.create();
     final GsonBuilder builder = new GsonBuilder();
@@ -121,16 +122,13 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
     flowFile =
         session.write(
             flowFile,
-            new OutputStreamCallback() {
-              @Override
-              public void process(OutputStream out) {
-                String asJson = gson.toJson(observable);
-                try {
-                  out.write(asJson.getBytes(StandardCharsets.UTF_8));
-                  getLogger().info("Writing observable to the flowfile.");
-                } catch (Exception e) {
-                  throw new ProcessException("Error writing content", e);
-                }
+            out -> {
+              String asJson = gson.toJson(observable);
+              try {
+                out.write(asJson.getBytes(StandardCharsets.UTF_8));
+                getLogger().info("Writing observable to the flowfile.");
+              } catch (Exception e) {
+                throw new ProcessException("Error writing content", e);
               }
             });
 

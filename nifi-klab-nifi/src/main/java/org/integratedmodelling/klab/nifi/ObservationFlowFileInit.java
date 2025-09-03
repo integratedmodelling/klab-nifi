@@ -1,6 +1,5 @@
 package org.integratedmodelling.klab.nifi;
 
-
 import com.google.gson.Gson;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -31,77 +30,76 @@ import org.integratedmodelling.klab.api.scope.ContextScope;
 @CapabilityDescription("Generates FlowFiles for the Observation Relay Processor")
 
 /*
-    Just creates the flow file for the observations relay processor
- */
+   Just creates the flow file for the observations relay processor
+*/
 
 public class ObservationFlowFileInit extends AbstractProcessor {
 
+  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
+      new PropertyDescriptor.Builder()
+          .name("klab-controller-service")
+          .displayName("k.LAB Controller Service")
+          .description("The k.LAB Controller Service providing the digital twin scope.")
+          .required(true)
+          .identifiesControllerService(KlabController.class)
+          .build();
 
-    public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
-            new PropertyDescriptor.Builder()
-                    .name("klab-controller-service")
-                    .displayName("k.LAB Controller Service")
-                    .description("The k.LAB Controller Service providing the digital twin scope.")
-                    .required(true)
-                    .identifiesControllerService(KlabController.class)
-                    .build();
+  public static final Relationship REL_SUCCESS =
+      new Relationship.Builder()
+          .name("success")
+          .description("On Success from the Processor")
+          .build();
 
-    public static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name("success")
-            .description("On Success from the Processor")
-            .build();
+  public static final Relationship REL_FAILURE =
+      new Relationship.Builder()
+          .name("failure")
+          .description("On Failure from the Processor")
+          .build();
 
-    public static final Relationship REL_FAILURE = new Relationship.Builder()
-            .name("failure")
-            .description("On Failure from the Processor")
-            .build();
+  public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
+      List.of(KLAB_CONTROLLER_SERVICE);
 
-    public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-            List.of(KLAB_CONTROLLER_SERVICE);
+  public static Set<Relationship> RELATIONSHIPS = Set.of(REL_SUCCESS, REL_FAILURE);
+  private volatile KlabController klabController;
+  private volatile ContextScope contextScope;
 
-    public static Set<Relationship> RELATIONSHIPS = Set.of(REL_SUCCESS, REL_FAILURE);
-    private volatile KlabController klabController;
-    private volatile ContextScope contextScope;
+  @Override
+  protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
+    return PROPERTY_DESCRIPTORS;
+  }
 
+  @Override
+  public Set<Relationship> getRelationships() {
+    return RELATIONSHIPS;
+  }
 
-    @Override
-    protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
-        return PROPERTY_DESCRIPTORS;
-    }
-
-    @Override
-    public Set<Relationship> getRelationships() {
-        return RELATIONSHIPS;
-    }
-
-
-    @OnScheduled
+  @OnScheduled
   /*
-    The first call after the basic Validations are passed, it gets the Scope from the Controller Service
-    it needs to interact and relay the observations as required
-   */
-    public void initializeScope(final ProcessContext context) {
-        klabController =
-                context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
+   The first call after the basic Validations are passed, it gets the Scope from the Controller Service
+   it needs to interact and relay the observations as required
+  */
+  public void initializeScope(final ProcessContext context) {
+    klabController =
+        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
 
-        // Get the ContextScope from the controller
-        contextScope = (ContextScope) klabController.getScope(ContextScope.class);
-        if (contextScope == null) {
-            getLogger().error("No ContextScope available from the KlabController");
-        }
+    // Get the ContextScope from the controller
+    contextScope = (ContextScope) klabController.getScope(ContextScope.class);
+    if (contextScope == null) {
+      getLogger().error("No ContextScope available from the KlabController");
+    }
+  }
+
+  @Override
+  public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+    FlowFile flowFile = session.get();
+    if (flowFile == null) {
+      return;
     }
 
-    @Override
-    public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-        FlowFile flowFile = session.create(); // create a flow file..
-        if (flowFile == null) {
-            return;
-        }
-
-        if (contextScope == null) {
-            getLogger().error("Context Scope from k.LAB Controller Service is null");
-            return;
-        }
+    if (contextScope == null) {
+      getLogger().error("Context Scope from k.LAB Controller Service is null");
+      return;
+    }
 
     flowFile =
         session.write(
@@ -110,11 +108,12 @@ public class ObservationFlowFileInit extends AbstractProcessor {
               @Override
               public void process(OutputStream out) {
 
-                  ConceptImpl ccpt = new ConceptImpl();
-                  ccpt.setUrn("earth:Terrestrial earth:Region");
-                  ccpt.setId(-1);
+                ConceptImpl ccpt = new ConceptImpl();
+                ccpt.setUrn("earth:Terrestrial earth:Region");
+                ccpt.setId(-1);
 
-                  ObservationImpl obs = DigitalTwin.createObservation(contextScope, new ObservableImpl(ccpt));
+                ObservationImpl obs =
+                    DigitalTwin.createObservation(contextScope, new ObservableImpl(ccpt));
 
                 var geom =
                     GeometryImpl.builder()
@@ -144,8 +143,7 @@ public class ObservationFlowFileInit extends AbstractProcessor {
               }
             });
 
-        // Transfer FlowFile to success
-        session.transfer(flowFile, REL_SUCCESS);
-    }
+    // Transfer FlowFile to success
+    session.transfer(flowFile, REL_SUCCESS);
+  }
 }
-
