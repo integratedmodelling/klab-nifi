@@ -1,0 +1,67 @@
+{
+  "observable" : {
+    "name" : "testregion",
+    "urn" : "earth:Terrestrial earth:Region",
+    "artifactType" : "OBJECT",
+    "semantics" : {
+      "id" : 124645748995,
+      "urn" : "earth:Terrestrial earth:Region",
+      "metadata" : { },
+      "type" : [ "DIRECT_OBSERVABLE", "COUNTABLE", "SUBJECT", "OBSERVABLE" ],
+      "isAbstract" : false,
+      "collective" : false,
+      "annotations" : [ ],
+      "notifications" : [ ],
+      "namespace" : "k.derived"
+    },
+    "isAbstract" : false,
+    "optional" : false,
+    "generic" : false,
+    "resolutionDirectives" : [ ],
+    "annotations" : [ ],
+    "metadata" : { },
+    "genericComponents" : [ ],
+    "specializedComponents" : [ ]
+  },
+  "geometry" : {
+    "dimensions" : [ {
+      "type" : "SPACE",
+      "regular" : true,
+      "dimensionality" : 2,
+      "parameters" : {
+        "shape" : "EPSG:4326 POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))",
+        "sgrid" : "1.km",
+        "proj" : "EPSG:4326"
+      },
+      "generic" : false,
+      "coverage" : 1.0
+    }, {
+      "type" : "TIME",
+      "regular" : false,
+      "dimensionality" : 1,
+      "parameters" : {
+        "ttype" : "PHYSICAL",
+        "tstart" : 1325376000000,
+        "tend" : 1356998400000,
+        "tscope" : 1.0,
+        "tunit" : "year"
+      },
+      "generic" : false,
+      "coverage" : 1.0
+    } ],
+    "granularity" : "SINGLE",
+    "scalar" : false,
+    "metadata" : { },
+    "empty" : false,
+    "universal" : false,
+    "generic" : false
+  },
+  "metadata" : { },
+  "id" : -1,
+  "resolvedCoverage" : 0.0,
+  "transientId" : 6514,
+  "eventTimestamps" : [ ],
+  "substantialQuality" : false,
+  "notifications" : [ ],
+  "name" : "testregion"
+}
