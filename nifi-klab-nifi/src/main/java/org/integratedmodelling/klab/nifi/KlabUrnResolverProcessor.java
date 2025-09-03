@@ -1,35 +1,30 @@
 package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
-import org.integratedmodelling.klab.api.knowledge.KlabAsset;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
-import org.integratedmodelling.klab.api.services.ResourcesService;
 import org.integratedmodelling.klab.api.services.Reasoner;
-
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_SEMANTIC_TYPES;
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
+import org.integratedmodelling.klab.api.services.ResourcesService;
 
 @ReadsAttributes({
   @ReadsAttribute(
@@ -146,9 +141,6 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
     Gson gson = builder.create();
     getLogger().warn(solved.toString());
     var observable = solved.getResults().stream().findFirst().orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
-
-    FlowFile flowFile = session.create();
-
 
     flowFile =
         session.write(
