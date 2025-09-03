@@ -22,6 +22,7 @@ import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.ResourcesService;
+import org.integratedmodelling.klab.api.services.Reasoner;
 
 @ReadsAttributes({
   @ReadsAttribute(
@@ -109,14 +110,20 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
 
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
     var solved = contextScope.getService(ResourcesService.class).resolve(urn, contextScope);
+    var solved_reason = contextScope.getService(Reasoner.class).resolveConcept(urn);
+    var solved_observable = contextScope.getService(Reasoner.class).resolveObservable(urn);
 
+    getLogger().info("Solved Concept"  + solved_reason.getUrn());
+    getLogger().info("Solved Observable" + solved_observable.getUrn());
+    final GsonBuilder builder = new GsonBuilder();
+    builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
+
+    Gson gson = builder.create();
     getLogger().warn(solved.toString());
     var observable = solved.getResults().stream().findFirst().orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
 
     FlowFile flowFile = session.create();
-    final GsonBuilder builder = new GsonBuilder();
-    builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
-    Gson gson = builder.create();
+
 
     flowFile =
         session.write(
@@ -124,7 +131,7 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
             new OutputStreamCallback() {
               @Override
               public void process(OutputStream out) {
-                String asJson = gson.toJson(observable);
+                String asJson = gson.toJson(solved_observable);
                 try {
                   out.write(asJson.getBytes(StandardCharsets.UTF_8));
                   getLogger().info("Writing observable to the flowfile.");
