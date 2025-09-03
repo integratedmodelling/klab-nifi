@@ -3,7 +3,6 @@ package org.integratedmodelling.klab.nifi.utils;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.Date;
-import java.util.Optional;
 
 public class KlabNifiInputRequest {
   private String name;
@@ -19,7 +18,7 @@ public class KlabNifiInputRequest {
   public KlabNifiInputRequest build(Builder builder) {
     this.shape = builder.shape;
     this.sgrid = builder.sgrid;
-    this.projection = builder.projection.orElse("EPSG:4326");
+    this.projection = builder.projection.isEmpty() ? "EPSG:4326" : builder.projection;
     this.start = builder.start;
     this.end = builder.end;
     this.extension = builder.extension;
@@ -36,6 +35,7 @@ public class KlabNifiInputRequest {
     var semanticsJson = new JsonObject();
     semanticsJson.addProperty("urn", this.urn);
     var typeJson = new JsonArray();
+    // TODO
     typeJson.add("DIRECT_OBSERVABLE");
     typeJson.add("COUNTABLE");
     typeJson.add("SUBJECT");
@@ -44,15 +44,6 @@ public class KlabNifiInputRequest {
     observableJson.add("semantics", semanticsJson);
     observableJson.addProperty("name", this.name);
 
-    var geometryJson = getJsonObject();
-
-    ret.add("observable", observableJson);
-    ret.add("geometry", geometryJson);
-    ret.addProperty("id", -1);
-    return ret.toString();
-  }
-
-  private JsonObject getJsonObject() {
     var geometryJson = new JsonObject();
     var dimensionsJson = new JsonArray();
     var spaceJson = new JsonObject();
@@ -75,13 +66,17 @@ public class KlabNifiInputRequest {
     dimensionsJson.add(spaceJson);
     dimensionsJson.add(timeJson);
     geometryJson.add("dimensions", dimensionsJson);
-    return geometryJson;
+
+    ret.add("observable", observableJson);
+    ret.add("geometry", geometryJson);
+    ret.addProperty("id", -1);
+    return ret.toString();
   }
 
   public static class Builder {
     private String shape;
     private String sgrid;
-    private Optional<String> projection;
+    private String projection;
     private long start;
     private long end;
     private double extension;
@@ -98,7 +93,7 @@ public class KlabNifiInputRequest {
     }
 
     public Builder setProjection(String projection) {
-      this.projection = Optional.of(projection);
+      this.projection = projection;
       return this;
     }
 

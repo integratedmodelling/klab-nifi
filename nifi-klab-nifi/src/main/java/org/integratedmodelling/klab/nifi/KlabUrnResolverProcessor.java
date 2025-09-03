@@ -1,9 +1,14 @@
 package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
@@ -21,6 +26,9 @@ import org.integratedmodelling.klab.api.knowledge.KlabAsset;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.ResourcesService;
+
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_SEMANTIC_TYPES;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 
 @ReadsAttributes({
   @ReadsAttribute(
@@ -100,7 +108,29 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
 
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-    String urn = context.getProperty(PROPERTY_KLAB_URN).getValue();
+    String urn = null;
+    var flowFile = session.get();
+    try (final InputStream in = session.read(flowFile);
+        final InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+      final JsonElement root = JsonParser.parseReader(reader);
+
+      if (root.isJsonObject()) {
+        final JsonObject jsonObject = root.getAsJsonObject();
+        if (jsonObject.has("urn")) {
+          final JsonElement element = jsonObject.get("urn");
+          urn = element.getAsString();
+        } else {
+          getLogger().warn("JSON key not found in FlowFile");
+        }
+      }
+    } catch (final IOException e) {
+      getLogger().error("Failed to read FlowFile content due to {}", new Object[] {e}, e);
+    }
+
+    if (urn == null) {
+      // TODO thrown an exception
+      return;
+    }
 
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
     var solved = contextScope.getService(ResourcesService.class).resolve(urn, contextScope);
@@ -114,24 +144,15 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
             .findFirst()
             .orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
 
-    FlowFile flowFile = session.create();
+    var concept = contextScope.getService(ResourcesService.class).retrieveConcept(urn);
+    var semanticTypes = concept.getType();
+    var attributes = Map.of(KLAB_SEMANTIC_TYPES, semanticTypes.toString());
+
     final GsonBuilder builder = new GsonBuilder();
     builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
     Gson gson = builder.create();
-
-    flowFile =
-        session.write(
-            flowFile,
-            out -> {
-              String asJson = gson.toJson(observable);
-              try {
-                out.write(asJson.getBytes(StandardCharsets.UTF_8));
-                getLogger().info("Writing observable to the flowfile.");
-              } catch (Exception e) {
-                throw new ProcessException("Error writing content", e);
-              }
-            });
-
+    // We send back the same flowfile plus the attributes
+    session.putAllAttributes(flowFile, attributes);
     session.transfer(flowFile, REL_SUCCESS);
     session.commit();
   }
