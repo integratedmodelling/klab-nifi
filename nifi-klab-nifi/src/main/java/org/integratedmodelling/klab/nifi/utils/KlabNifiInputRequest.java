@@ -1,7 +1,10 @@
 package org.integratedmodelling.klab.nifi.utils;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import org.integratedmodelling.klab.api.knowledge.Observable;
+
 import java.util.Date;
 
 public class KlabNifiInputRequest {
@@ -28,22 +31,21 @@ public class KlabNifiInputRequest {
     return this;
   }
 
-  public String requestToJson() {
+  public String requestToJson(Observable observable) {
     var ret = new JsonObject();
 
-    var observableJson = new JsonObject();
-    var semanticsJson = new JsonObject();
-    semanticsJson.addProperty("urn", this.urn);
-    var typeJson = new JsonArray();
-    // TODO
-    typeJson.add("DIRECT_OBSERVABLE");
-    typeJson.add("COUNTABLE");
-    typeJson.add("SUBJECT");
-    typeJson.add("OBSERVABLE");
-    observableJson.addProperty("urn", this.urn);
-    observableJson.add("semantics", semanticsJson);
+    var observableJson = new Gson().toJsonTree(observable).getAsJsonObject();
     observableJson.addProperty("name", this.name);
 
+    var geometryJson = getJsonObject();
+
+    ret.add("observable", observableJson);
+    ret.add("geometry", geometryJson);
+    ret.addProperty("id", -1);
+    return ret.toString();
+  }
+
+  private JsonObject getJsonObject() {
     var geometryJson = new JsonObject();
     var dimensionsJson = new JsonArray();
     var spaceJson = new JsonObject();
@@ -66,11 +68,7 @@ public class KlabNifiInputRequest {
     dimensionsJson.add(spaceJson);
     dimensionsJson.add(timeJson);
     geometryJson.add("dimensions", dimensionsJson);
-
-    ret.add("observable", observableJson);
-    ret.add("geometry", geometryJson);
-    ret.addProperty("id", -1);
-    return ret.toString();
+    return geometryJson;
   }
 
   public static class Builder {
