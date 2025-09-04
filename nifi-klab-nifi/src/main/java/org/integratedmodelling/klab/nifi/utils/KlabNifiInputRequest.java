@@ -37,7 +37,7 @@ public class KlabNifiInputRequest {
     var observableJson = new Gson().toJsonTree(observable).getAsJsonObject();
     observableJson.addProperty("name", this.name);
 
-    var geometryJson = getJsonObject();
+    var geometryJson = getKlabGeometryAsJson();
 
     ret.add("observable", observableJson);
     ret.add("geometry", geometryJson);
@@ -45,7 +45,7 @@ public class KlabNifiInputRequest {
     return ret.toString();
   }
 
-  private JsonObject getJsonObject() {
+  private JsonObject getKlabGeometryAsJson() {
     var geometryJson = new JsonObject();
     var dimensionsJson = new JsonArray();
     var spaceJson = new JsonObject();
