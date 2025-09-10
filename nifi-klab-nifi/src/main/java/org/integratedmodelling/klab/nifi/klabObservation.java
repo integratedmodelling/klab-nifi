@@ -36,7 +36,8 @@ import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"}) 
-@InputRequirement(InputRequirement.Requirement.INPUT_REQUIRED) // This shouldn't be the first processor 
+@InputRequirement(InputRequirement.Requirement.INPUT_REQUIRED) // This shouldn't be the first processor
+
 @CapabilityDescription( "Parses incoming Flowfiles and creates an Observation Obj" 
         + "Also is responsible for some pre validation steps"
         + "Observation processor for the digital twin. Submitted unresolved observations " 
