@@ -5,6 +5,8 @@ services:
     image: apache/nifi:2.4.0
     ports:
       - "8443:8443"
+      - "3306:3306"
+      - "3307:3307"
     volumes:
       - ./custom-nars:/opt/nifi/custom-nars
       - C:\Users\arnab.moitra\Desktop\NIFI_Tests\nifi_input:/opt/nifi/input
