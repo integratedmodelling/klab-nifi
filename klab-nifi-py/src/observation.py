@@ -10,6 +10,7 @@ class Observation:
         if not semantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
 
+        logger.info("Setting Name and Semantics to the Observation")
         self.name = name
 
         ## To check how can we validate the semantics here without the Python Client

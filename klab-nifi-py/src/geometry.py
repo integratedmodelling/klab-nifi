@@ -89,7 +89,11 @@ class Geometry:
     Creates a Geometry, with Space and Time
     '''
 
-    def __init__(self, space:Space, time:Time):
+    def __init__(self, space:Space=None, time:Time=None):
+
+        if not space or not time:
+            raise KlabNifiException("In geometry, both Spatial and Temporal Dimensions are required")
+        
         self.space = space
         self.time = time
 
