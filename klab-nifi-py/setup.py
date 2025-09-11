@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="klab-nifi-py",            
+    name="klab_nifi_py",            
     version="0.0.1-beta",                
     author="Arnab Moitra",
     author_email="arnab.moitra@bc3research.org",
