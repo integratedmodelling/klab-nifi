@@ -44,7 +44,7 @@ class Space:
 
 class Time:
 
-    TIME_SCALES = ["year"]
+    TIME_SCALES = ["year"] ## Add to the scales here
 
     def __init__(self,
                  tstart:Union[datetime, int]=None, 
@@ -58,7 +58,7 @@ class Time:
         
         if isinstance(tend, str):
             if not self.validate(tend):
-                raise KlabNifiException("EndTimestamp is wrong")
+                raise KlabNifiException("End Timestamp is wrong")
             
         if tunit.lower() not in self.TIME_SCALES:
             raise KlabNifiException("Time Unit is wrong")
