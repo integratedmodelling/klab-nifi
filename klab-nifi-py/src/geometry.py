@@ -49,7 +49,8 @@ class Time:
     def __init__(self,
                  tstart:Union[datetime, int]=None, 
                  tend: Union[datetime, int]=None,
-                 tunit:str=None):
+                 tscope: int=1,
+                 tunit:str="year"):
         
         if isinstance(tstart, str):
             if not self.validate(tstart):
@@ -66,6 +67,7 @@ class Time:
         self.tstart = tstart
         self.tend = tend
         self.tunit = tunit
+        self.tscope = tscope
 
     @staticmethod
     def validate(timestamp_str:str)->bool:
