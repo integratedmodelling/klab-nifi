@@ -2,3 +2,4 @@ target
 .idea
 custom-nars
 .mvn/wrapper/maven-wrapper.jar
+*.egg-info
