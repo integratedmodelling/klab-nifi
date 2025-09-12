@@ -8,7 +8,8 @@ import logging
 class NifiKlabObservation(BaseModel):
     '''
     The Main Observation Class in Python for creating the JSON Payload passing to 
-    the Observation Relay Processor.
+    the Observation Relay Processor through the flowfile. If directly passed, the 
+    Nifi Processor should be written in Python in that case, which is possible Nifi 2.0 onwards.
 
     If using the ListenHTTP Processor in Apache Nifi, use the :class:`Client` class, and use the 
     `submit` method.
@@ -41,7 +42,7 @@ class Client:
     '''
     Class to submit, an Observation to the Nifi ListenHTTP Processor
     Create an Observation, with :class:`NifiKlabObservation`, and use the `submit` 
-    method to submit the created observation query to the endpoint
+    method to submit the created observation query to the ListemHTTP Processor Endpoint
     '''
 
     def __init__(self,
