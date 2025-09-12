@@ -6,6 +6,14 @@ import logging
 
 
 class NifiKlabObservation(BaseModel):
+    '''
+    The Main Observation Class in Python for creating the JSON Payload passing to 
+    the Observation Relay Processor.
+
+    If using the ListenHTTP Processor in Apache Nifi, use the :class:`Client` class, and use the 
+    `submit` method.
+
+    '''
 
     def __init__(self, 
                  space:Space=None,
@@ -29,29 +37,26 @@ class NifiKlabObservation(BaseModel):
         logger.info("Initial Validations Passed, Observation Payload Created")
 
 
-
 class Client:
     '''
-    To submit a k.LAB Observation to the Nifi Server
-    With the Standard ListenHTTP Processor in Apache Nifi
+    Class to submit, an Observation to the Nifi ListenHTTP Processor
+    Create an Observation, with :class:`NifiKlabObservation`, and use the `submit` 
+    method to submit the created observation query to the endpoint
     '''
+
     def __init__(self,
                  host:str="127.0.0.1",
                  port:str="3306",
-                 healthport:str=None,
-                 obs:NifiKlabObservation=None):
+                 healthport:str=None):
         
-        if not obs:
-            raise KlabNifiException("Observation not initialized")
-        
-
         self.host = host
         self.port = port
-        self.observation = obs
         self.healthport = healthport
 
         if self.healthport :
             self.healthCheck()
+        else:
+            logger.info("Health Check Port not configured, skipping healthcheck...")
 
 
     def healthCheck(self):
@@ -61,13 +66,16 @@ class Client:
         logger.info("HealthCheck for ListenHTTP Processor successful")
 
 
-    def submit(self):
+    def submit(self, obs:NifiKlabObservation):
         logger.debug("Making a Post Request to the Nifi Listen HTTP Endpoint")
+
+        if not obs:
+            raise KlabNifiException("Observation cannot be Null")
 
         try:
             resp = requests.post(
                 url=self.host + ":" + self.port,
-                json = self.observation.to_dict()
+                json = obs.to_dict()
             )
             
             if resp.status_code != 200:
