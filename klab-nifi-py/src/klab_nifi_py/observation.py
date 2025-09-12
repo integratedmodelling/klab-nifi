@@ -1,7 +1,8 @@
 from .logging import logger
 from .exception import *
+from .commons import BaseModel
 
-class Observation:
+class Observation(BaseModel):
     def __init__(self, name:str, semantics:str):
 
         if not name :

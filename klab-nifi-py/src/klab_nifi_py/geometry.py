@@ -1,4 +1,4 @@
-from .klab_attrs import *
+from .commons import *
 from shapely import wkt
 from shapely.errors import WKTReadingError
 from shapely.geometry import Point, LineString, Polygon
@@ -7,7 +7,7 @@ from .logging import logger
 from datetime import datetime, timezone
 from .exception import *
 
-class Space:
+class Space(BaseModel):
     def __init__(self, shape:Union[List[tuple[float, float]] , str], grid:str="1.km"):
 
         if not shape:
@@ -42,7 +42,7 @@ class Space:
         self.sgrid = grid
         self.proj = KLAB_GEO_PROJ
 
-class Time:
+class Time(BaseModel):
 
     TIME_SCALES = ["year"] ## Add to the scales here
 
@@ -86,7 +86,7 @@ class Time:
             return False
 
 
-class Geometry:
+class Geometry(BaseModel):
     '''
     Creates a Geometry, with Space and Time
     '''
