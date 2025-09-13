@@ -5,14 +5,16 @@ import requests
 import logging
 
 
+NIFI_HEALTHCHECK_PATH = "/healthcheck"
+
 class NifiKlabObservation(BaseModel):
     '''
     The Main Observation Class in Python for creating the JSON Payload passing to 
-    the Observation Relay Processor through the flowfile. If directly passed, the 
-    Nifi Processor should be written in Python in that case, which is possible Nifi 2.0 onwards.
+    the Observation Relay Processor through the flowfile. use the method `to_dict()`
+    method to convert the observation object to an equivalent JSON.
 
     If using the ListenHTTP Processor in Apache Nifi, use the :class:`Client` class, and use the 
-    `submit` method.
+    `submit(:class:NifiKlabObservation)` method.
 
     '''
 
@@ -46,7 +48,7 @@ class Client:
     '''
 
     def __init__(self,
-                 host:str="127.0.0.1",
+                 host:str="http://127.0.0.1",
                  port:str="3306",
                  healthport:str=None):
         
@@ -61,7 +63,7 @@ class Client:
 
 
     def healthCheck(self):
-        resp = requests.get(self.host + ":" + self.healthport)
+        resp = requests.get(self.host + ":" + self.healthport + NIFI_HEALTHCHECK_PATH)
         if resp.status_code != 200:
             raise KlabNifiException("HealthCheck failure") 
         logger.info("HealthCheck for ListenHTTP Processor successful")

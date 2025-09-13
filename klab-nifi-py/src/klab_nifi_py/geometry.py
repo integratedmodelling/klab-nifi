@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 from .exception import *
 
 class Space(BaseModel):
-    def __init__(self, shape:Union[List[tuple[float, float]] , str], grid:str="1.km"):
+    def __init__(self, 
+                 shape:Union[List[tuple[float, float]] , str], 
+                 grid:str="1.km",
+                 proj:str=KLAB_GEO_PROJ):
 
         if not shape:
             raise KlabNifiException("Shape cannot be None")
@@ -38,9 +41,9 @@ class Space(BaseModel):
                 raise KlabNifiException("Invalid Geomtry")
             
         
-        self.shape = KLAB_GEO_PROJ + " " + geom.wkt
+        self.shape = proj + " " + geom.wkt
         self.sgrid = grid
-        self.proj = KLAB_GEO_PROJ
+        self.proj = proj
 
 class Time(BaseModel):
 

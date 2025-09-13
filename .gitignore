@@ -3,3 +3,4 @@ target
 custom-nars
 .mvn/wrapper/maven-wrapper.jar
 *.egg-info
+**/__pycache__
