@@ -5,6 +5,13 @@ import java.util.Date;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+
+/**
+ * Use this class to create an Observation payload, to 
+ * send to the KlabObservation Nifi Processor, or use the ListenHTTP
+ * Processor in order to convert the post payload, to an equivalent Nifi Flowfile
+ * using {@link KlabNifiRequestHTTP}
+ */
 public class KlabNifiRequest {
     private final Geometry geometry;
     private final Observation observation;
