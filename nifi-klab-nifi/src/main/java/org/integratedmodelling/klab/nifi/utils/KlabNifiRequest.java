@@ -47,7 +47,6 @@ public class KlabNifiRequest {
             this.time = builder.time; 
         }
 
-
         public static class Builder {
             private Space space;
             private Time time;
