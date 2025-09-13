@@ -9,14 +9,14 @@ import kong.unirest.Unirest;
  * Using the {@link KlabNifiRequest} Class to create the Observation payload, and 
  * submit it using the {@link #SubmitObservation} Method
  */
-public class KlabNifiRequestHTTP {
+public class KlabNifiListentHTTPClient {
 
     private String host;
     private String port = "3306";
     private String healthPort = null;
 
 
-    public KlabNifiRequestHTTP (Builder builder){
+    public KlabNifiListentHTTPClient (Builder builder){
         this.host = builder.host;
         this.port = builder.port;
         this.healthPort = builder.healthPort;
