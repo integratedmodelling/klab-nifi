@@ -150,21 +150,21 @@ public class KlabNifiRequest {
         private final String name;
         private final String semantics;
 
-        private Observation(Builder builder) { this.name = builder.name; this.semantics = builder.semantics; }
-
-        public String getName() { return name; }
-        public String getSemantics() { return semantics; }
+        private Observation(Builder builder) { 
+            this.name = builder.name; 
+            this.semantics = builder.semantics; 
+        }
 
         public static class Builder {
             private String name;
             private String semantics;
 
-            public Builder name(String name) { 
+            public Builder setName(String name) { 
                 this.name = name; 
                 return this; 
             }
             
-            public Builder semantics(String semantics) { 
+            public Builder setSemantics(String semantics) { 
                 this.semantics = semantics; 
                 return this; }
             
