@@ -141,8 +141,14 @@ public class KlabNifiRequest {
                 return this; 
             }
 
-            public Builder tscope(int tscope) { this.tscope = tscope; return this; }
-            public Time build() { return new Time(this); }
+            public Builder setTscope(int tscope) { 
+                this.tscope = tscope; 
+                return this; 
+            }
+
+            public Time build() { 
+                return new Time(this); 
+            }
         }
     }
 
