@@ -82,7 +82,7 @@ public class KlabNifiRequest {
         private final String proj ;
 
         private Space(Builder builder) { 
-            this.shape = builder.proj + builder.shape; 
+            this.shape = builder.proj + " " + builder.shape; 
             this.sgrid = builder.sgrid; 
             this.proj = builder.proj; 
         }
