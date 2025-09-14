@@ -7,7 +7,7 @@ import logging
 
 NIFI_HEALTHCHECK_PATH = "/healthcheck"
 
-class NifiKlabObservation(BaseModel):
+class KlabNifiRequest(BaseModel):
     '''
     The Main Observation Class in Python for creating the JSON Payload passing to 
     the Observation Relay Processor through the flowfile. use the method `to_dict()`
@@ -40,7 +40,7 @@ class NifiKlabObservation(BaseModel):
         logger.info("Initial Validations Passed, Observation Payload Created")
 
 
-class Client:
+class KlabNifiListenHTTPClient:
     '''
     Class to submit, an Observation to the Nifi ListenHTTP Processor
     Create an Observation, with :class:`NifiKlabObservation`, and use the `submit` 
@@ -69,7 +69,7 @@ class Client:
         logger.info("HealthCheck for ListenHTTP Processor successful")
 
 
-    def submit(self, obs:NifiKlabObservation):
+    def submitObservation(self, obs:KlabNifiRequest):
         logger.debug("Making a Post Request to the Nifi Listen HTTP Endpoint")
 
         if not obs:

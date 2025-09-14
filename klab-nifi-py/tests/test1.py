@@ -20,7 +20,7 @@ obs = Observation(
 obs.name = "777"
 
 
-klabNifiObs = NifiKlabObservation(
+klabNifiObs = KlabNifiRequest(
     space = space, 
     time = time,
     observation=obs
@@ -28,5 +28,5 @@ klabNifiObs = NifiKlabObservation(
 
 print (klabNifiObs.to_dict())
 
-nifiklabClient = Client(port="3306", healthport="3307")
-nifiklabClient.submit(klabNifiObs)
+nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
+nifiklabClient.submitObservation(klabNifiObs)

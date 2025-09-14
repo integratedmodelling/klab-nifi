@@ -31,12 +31,12 @@ public class KlabNifiListenHTTPClient {
     public void submitObservation(KlabNifiRequest req) throws Exception {
         System.out.println("Submitting Observation to the NiFi ListenHTTP Processor");
 
-        // Optional Health Check
+        // Optional Health Check if set up in the ListenHTTP Processor in the Nifi Flow
+        // If set in the library, then it would definitely perform a healthcheck call nonetheless
         if (healthPort != null) {
-            System.out.println("Checking HealthCheck...");
-            HttpResponse<JsonNode> response = Unirest.get(buildUrl(healthPort, "/healthcheck"))
+            HttpResponse<String> response = Unirest.get(buildUrl(healthPort, "/healthcheck"))
                     .header("Accept", "application/json")
-                    .asJson();
+                    .asString();
 
             if (!response.isSuccess()) {
                 throw new KlabNifiException("NiFi ListenHTTP Processor not ready");
