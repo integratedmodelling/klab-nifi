@@ -8,8 +8,7 @@ import org.apache.nifi.components.PropertyDescriptor;
 import java.nio.charset.StandardCharsets; 
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
-import org.apache.nifi.logging.LogMessage;
-import org.apache.nifi.processor.AbstractProcessor; 
+import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext; 
 import org.apache.nifi.processor.ProcessSession; 
 import org.apache.nifi.processor.ProcessorInitializationContext; 
@@ -25,8 +24,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference; 
 import org.apache.nifi.annotation.behavior.InputRequirement; 
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXT_PROJ; 
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID; 
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin; 
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
+import org.integratedmodelling.klab.nifi.utils.KlabNifiRequest;
+import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl; 
 import org.integratedmodelling.klab.api.knowledge.Observable; 
 import org.integratedmodelling.klab.api.knowledge.observation.Observation; 
@@ -118,53 +118,25 @@ public class klabObservation extends AbstractProcessor {
                 return; 
             } 
             
-            final GsonBuilder builder = new GsonBuilder(); 
-            AtomicReference<JsonObject> jsonHolder = new AtomicReference<>();
+            final GsonBuilder builder = new GsonBuilder();
+            AtomicReference<KlabNifiRequest> req = new AtomicReference<>();
 
             Gson gson = builder.create(); // Read JSON directly from FlowFile input stream 
             session.read(flowfile, in -> {
                 try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
-                        JsonObject jsonObject = gson.fromJson(reader, JsonObject.class);
-                        jsonHolder.set(jsonObject);
+                        req.set(gson.fromJson(reader, KlabNifiRequest.class));
+
                 } catch (Exception e) {
                     getLogger().error("Error reading JSON", e);
                 }
             });
 
-            JsonObject jsonObject = jsonHolder.get();
-            if (jsonObject == null) {
-                getLogger().error("Invalid JSON received");
-                session.transfer(flowfile, REL_FAILURE);
-                return;
-            }
-            
-    
-            String wktGeom = jsonObject.has("geometry") ? jsonObject.get("geometry").getAsString() : null;
-            String obsSemantics = jsonObject.has("semantics") ? jsonObject.get("semantics").getAsString() : null;
-            String obsName = jsonObject.has("name") ? jsonObject.get("name").getAsString() : null; // Basic Sanity Checks i.e. simple rule guards
-
-            if (obsSemantics == null){
-                getLogger().error("Semantics can't be null");
-                session.transfer(flowfile, REL_FAILURE);
-                return;
-            }
-
-            if (obsName == null) {
-                getLogger().error("Observation name can't be null");
-                session.transfer(flowfile, REL_FAILURE);
-                return;
-            }
-
-            if (wktGeom == null) { // If Geometry is null it's still fine
-                getLogger().info("The submitted payload doesn't contain a Geometry");
-            }
-
             getLogger().info("Payload parsing done...");
-            getLogger().info("Geometry is " + wktGeom);
-            getLogger().info("Observation Name " + obsName);
 
             // The Observable from the Semantics URN with the Reasoner Client
-            Observable observable = contextScope.getService(Reasoner.class).resolveObservable(obsSemantics);
+            Observable observable = contextScope.getService(Reasoner.class).resolveObservable(
+                    req.get().getObservation().getSemantics()
+            );
 
             Gson prettyGson = new GsonBuilder()
                     .setPrettyPrinting()
@@ -175,19 +147,21 @@ public class klabObservation extends AbstractProcessor {
 
             var geometry = GeometryImpl.builder()
                 .space()
-                    .shape(wktGeom)
-                .resolution("1.km")
-                .projection(KLAB_CONTEXT_PROJ)
+                    .shape(req.get().getGeometry().getSpace().getShape())
+                .resolution(req.get().getGeometry().getSpace().getSgrid())
+                .projection(req.get().getGeometry().getSpace().getProj())
                 .build()
                     .time()
-                .between(1325376000000L, 1356998400000L)
-                .resolution(Time.Resolution.Type.YEAR, 1)
+                .between(req.get().getGeometry().getTime().getTstart(),
+                        req.get().getGeometry().getTime().getTend())
+                .resolution(Time.Resolution.Type.YEAR,
+                        req.get().getGeometry().getTime().getTscope())
                 .build();
 
             ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
             obs.setGeometry(geometry.build());
-            obs.setName(obsName);
-            obs.setUrn(obsSemantics);
+            obs.setName(req.get().getObservation().getName());
+            obs.setUrn(req.get().getObservation().getSemantics());
             obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
             getLogger().info("Observation Payload Generation done, submitting the Observation");
 

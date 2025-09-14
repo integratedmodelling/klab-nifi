@@ -137,7 +137,8 @@ public class ObservationFlowFileInit extends AbstractProcessor {
                 ccpt.setId(-1);
 
                 ObservationImpl obs =
-                    DigitalTwin.createObservation(contextScope, new ObservableImpl(ccpt));
+                    //DigitalTwin.createObservation(contextScope, new ObservableImpl(ccpt));
+                  DigitalTwin.createObservation(contextScope);
 
                 var geom =
                     GeometryImpl.builder()
