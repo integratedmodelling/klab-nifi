@@ -4,6 +4,8 @@ import java.util.Date;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.locationtech.jts.io.WKTReader;
+import org.locationtech.jts.io.ParseException;
 
 
 /**
@@ -77,19 +79,37 @@ public class KlabNifiRequest {
     public static class Space {
         private final String shape;
         private final String sgrid;
-        private final String proj;
+        private final String proj ;
 
         private Space(Builder builder) { 
-            this.shape = builder.shape; 
+            this.shape = builder.proj + builder.shape; 
             this.sgrid = builder.sgrid; 
             this.proj = builder.proj; 
         }
 
+        /*
+         * Validates if a WKT string is valid or not
+         */
+        public static boolean isValidWKT(String wkt) {
+            WKTReader reader = new WKTReader();
+            try {
+                reader.read(wkt);  // Try parsing
+                return true;       // No exception -> valid
+            } catch (ParseException e) {
+                return false;      // Exception -> invalid
+            }
+        }
+
         public static class Builder {
             private String shape;
-            private String sgrid;
-            private String proj;
-            public Builder shape(String shape) { 
+            private String sgrid = "1.km";
+            private String proj = "EPSG:4326";
+
+            public Builder setShape(String shape) throws KlabNifiException { 
+
+                if (!isValidWKT(shape)) {
+                    throw new KlabNifiException("Invalid WKT String");
+                }
                 this.shape = shape; 
                 return this; 
             }
@@ -126,10 +146,15 @@ public class KlabNifiRequest {
         public static class Builder {
             private long tstart;
             private long tend;
-            private String tunit;
-            private int tscope;
+            private String tunit = "year";
+            private int tscope = 1;
 
-            public Builder setTime(long start, long end) {
+            public Builder setTime(long start, long end) throws KlabNifiException {
+
+                if (tstart > tend) {
+                    throw new 
+                    KlabNifiException("Start time can't be more than the end time");
+                }
                 this.tstart = start;
                 this.tend = end;
                 return this;

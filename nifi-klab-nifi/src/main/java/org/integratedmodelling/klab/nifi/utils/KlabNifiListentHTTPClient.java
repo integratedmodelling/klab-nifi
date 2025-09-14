@@ -33,7 +33,7 @@ public class KlabNifiListentHTTPClient {
                 .asJson();
 
             if (!response.isSuccess()) {
-                throw new Exception("Nifi ListenHTTP Processor not ready");
+                throw new KlabNifiException("Nifi ListenHTTP Processor not ready");
             }
         }
 
@@ -46,7 +46,7 @@ public class KlabNifiListentHTTPClient {
             .asJson();
 
         if (!postResponse.isSuccess()) {
-            throw new IllegalStateException(
+            throw new KlabNifiException(
                 "Failed to submit observation: HTTP " + 
                 postResponse.getStatus() +
                 " - " + postResponse.getBody()
