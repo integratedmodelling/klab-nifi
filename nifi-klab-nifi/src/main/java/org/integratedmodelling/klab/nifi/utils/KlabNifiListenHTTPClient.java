@@ -7,7 +7,7 @@ import kong.unirest.Unirest;
 /**
  * Use this class to submit an Observation to the NiFi ListenHTTP Processor.
  * <p>
- * Create the Observation payload using {@link KlabNifiRequest} and
+ * Create the Observation payload using {@link KlabObservationNifiRequest} and
  * submit it with {@link #submitObservation(KlabNifiRequest)}.
  */
 public class KlabNifiListenHTTPClient {

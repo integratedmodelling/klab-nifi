@@ -5,6 +5,7 @@ import java.util.Date;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.locationtech.jts.io.WKTReader;
+import org.integratedmodelling.klab.nifi.klabObservation;
 import org.locationtech.jts.io.ParseException;
 
 /**
@@ -65,12 +66,19 @@ public class KlabObservationNifiRequest {
             return this;
         }
 
-        public KlabObservationNifiRequest build() {
+        public KlabObservationNifiRequest build() throws KlabNifiException{
+            if (this.name == null) {
+                throw new KlabNifiException("Submitted Observation must have a Name");
+            }
+
+            if (this.semantics == null) {
+                throw new KlabNifiException("Submitted Observation must have a Semantics");
+            }
+
             return new KlabObservationNifiRequest(this);
         }
     }
 
-    // -------------------- Geometry --------------------
     public static class Geometry {
 
         public static class Space {
@@ -134,7 +142,10 @@ public class KlabObservationNifiRequest {
                     return this;
                 }
 
-                public KlabObservationNifiRequest.Geometry.Space build() {
+                public KlabObservationNifiRequest.Geometry.Space build() throws KlabNifiException{
+                    if (this.shape == null) {
+                        throw new KlabNifiException("Shape cannot be null");
+                    }
                     return new KlabObservationNifiRequest.Geometry.Space(this);
                 }
             }
