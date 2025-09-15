@@ -1,7 +1,9 @@
 package org.integratedmodelling.klab.nifi;
 
-import com.google.gson.Gson;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_SEMANTIC_TYPES;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -9,10 +11,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
-
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -25,17 +23,13 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.integratedmodelling.common.knowledge.ConceptImpl;
-import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.*;
-import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
-
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_SEMANTIC_TYPES;
 
 @Tags({"k.LAB", "source", "event-driven"})
 @CapabilityDescription("Generates FlowFiles for the Observation Relay Processor")

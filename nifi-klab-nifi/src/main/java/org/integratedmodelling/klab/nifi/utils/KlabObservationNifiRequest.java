@@ -1,12 +1,10 @@
 package org.integratedmodelling.klab.nifi.utils;
 
-import java.util.Date;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import org.locationtech.jts.io.WKTReader;
-import org.integratedmodelling.klab.nifi.klabObservation;
+import java.util.Date;
 import org.locationtech.jts.io.ParseException;
+import org.locationtech.jts.io.WKTReader;
 
 /**
  * Use this class to create an Observation payload, to
