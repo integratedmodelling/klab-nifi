@@ -72,6 +72,141 @@ public class KlabObservationNifiRequest {
 
     // -------------------- Geometry --------------------
     public static class Geometry {
+
+        public static class Space {
+            private final String shape;
+            private final String sgrid;
+            private final String proj;
+
+            private Space(KlabObservationNifiRequest.Geometry.Space.Builder builder) {
+                this.shape = builder.proj + " " + builder.shape;
+                this.sgrid = builder.sgrid;
+                this.proj = builder.proj;
+            }
+
+            /** Getters */
+            public String getShape() {
+                return shape;
+            }
+
+            public String getSgrid() {
+                return sgrid;
+            }
+
+            public String getProj() {
+                return proj;
+            }
+
+            /*
+             * Validates if a WKT string is valid or not
+             */
+            public static boolean isValidWKT(String wkt) {
+                WKTReader reader = new WKTReader();
+                try {
+                    reader.read(wkt);
+                    return true;
+                } catch (ParseException e) {
+                    return false;
+                }
+            }
+
+            public static class Builder {
+                private String shape;
+                private String sgrid = "1.km"; // default
+                private String proj = "EPSG:4326"; // default
+
+                public KlabObservationNifiRequest.Geometry.Space.Builder setShape(String shape)
+                        throws KlabNifiException {
+                    if (!isValidWKT(shape)) {
+                        throw new KlabNifiException("Invalid WKT String");
+                    }
+                    this.shape = shape;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Space.Builder setGrid(String sgrid) {
+                    this.sgrid = sgrid;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Space.Builder setProj(String proj) {
+                    this.proj = proj;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Space build() {
+                    return new KlabObservationNifiRequest.Geometry.Space(this);
+                }
+            }
+        }
+
+        public static class Time {
+            private final long tstart;
+            private final long tend;
+            private final String tunit;
+            private final int tscope;
+
+            private Time(KlabObservationNifiRequest.Geometry.Time.Builder builder) {
+                this.tstart = builder.tstart;
+                this.tend = builder.tend;
+                this.tunit = builder.tunit;
+                this.tscope = builder.tscope;
+            }
+
+            /** Getters */
+            public long getTstart() {
+                return tstart;
+            }
+
+            public long getTend() {
+                return tend;
+            }
+
+            public String getTunit() {
+                return tunit;
+            }
+
+            public int getTscope() {
+                return tscope;
+            }
+
+            public static class Builder {
+                private long tstart;
+                private long tend;
+                private String tunit = "year"; // default
+                private int tscope = 1;        // default
+
+                public KlabObservationNifiRequest.Geometry.Time.Builder setTime(long start, long end) throws KlabNifiException {
+                    if (start > end) {
+                        throw new KlabNifiException("Start time can't be more than the end time");
+                    }
+                    this.tstart = start;
+                    this.tend = end;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Time.Builder setTime(Date start, Date end) {
+                    this.tstart = start.toInstant().toEpochMilli();
+                    this.tend = end.toInstant().toEpochMilli();
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Time.Builder setTunit(String tunit) {
+                    this.tunit = tunit;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Time.Builder setTscope(int tscope) {
+                    this.tscope = tscope;
+                    return this;
+                }
+
+                public KlabObservationNifiRequest.Geometry.Time build() {
+                    return new KlabObservationNifiRequest.Geometry.Time(this);
+                }
+            }
+        }
+
         private final Space space;
         private final Time time;
 
@@ -105,141 +240,6 @@ public class KlabObservationNifiRequest {
 
             public Geometry build() {
                 return new Geometry(this);
-            }
-        }
-    }
-
-    // -------------------- Space --------------------
-    public static class Space {
-        private final String shape;
-        private final String sgrid;
-        private final String proj;
-
-        private Space(Builder builder) {
-            this.shape = builder.proj + " " + builder.shape;
-            this.sgrid = builder.sgrid;
-            this.proj = builder.proj;
-        }
-
-        /** Getters */
-        public String getShape() {
-            return shape;
-        }
-
-        public String getSgrid() {
-            return sgrid;
-        }
-
-        public String getProj() {
-            return proj;
-        }
-
-        /*
-         * Validates if a WKT string is valid or not
-         */
-        public static boolean isValidWKT(String wkt) {
-            WKTReader reader = new WKTReader();
-            try {
-                reader.read(wkt);
-                return true;
-            } catch (ParseException e) {
-                return false;
-            }
-        }
-
-        public static class Builder {
-            private String shape;
-            private String sgrid = "1.km"; // default
-            private String proj = "EPSG:4326"; // default
-
-            public Builder setShape(String shape) throws KlabNifiException {
-                if (!isValidWKT(shape)) {
-                    throw new KlabNifiException("Invalid WKT String");
-                }
-                this.shape = shape;
-                return this;
-            }
-
-            public Builder setGrid(String sgrid) {
-                this.sgrid = sgrid;
-                return this;
-            }
-
-            public Builder setProj(String proj) {
-                this.proj = proj;
-                return this;
-            }
-
-            public Space build() {
-                return new Space(this);
-            }
-        }
-    }
-
-    // -------------------- Time --------------------
-    public static class Time {
-        private final long tstart;
-        private final long tend;
-        private final String tunit;
-        private final int tscope;
-
-        private Time(Builder builder) {
-            this.tstart = builder.tstart;
-            this.tend = builder.tend;
-            this.tunit = builder.tunit;
-            this.tscope = builder.tscope;
-        }
-
-        /** Getters */
-        public long getTstart() {
-            return tstart;
-        }
-
-        public long getTend() {
-            return tend;
-        }
-
-        public String getTunit() {
-            return tunit;
-        }
-
-        public int getTscope() {
-            return tscope;
-        }
-
-        public static class Builder {
-            private long tstart;
-            private long tend;
-            private String tunit = "year"; // default
-            private int tscope = 1;        // default
-
-            public Builder setTime(long start, long end) throws KlabNifiException {
-                if (start > end) {
-                    throw new KlabNifiException("Start time can't be more than the end time");
-                }
-                this.tstart = start;
-                this.tend = end;
-                return this;
-            }
-
-            public Builder setTime(Date start, Date end) {
-                this.tstart = start.toInstant().toEpochMilli();
-                this.tend = end.toInstant().toEpochMilli();
-                return this;
-            }
-
-            public Builder setTunit(String tunit) {
-                this.tunit = tunit;
-                return this;
-            }
-
-            public Builder setTscope(int tscope) {
-                this.tscope = tscope;
-                return this;
-            }
-
-            public Time build() {
-                return new Time(this);
             }
         }
     }
