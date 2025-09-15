@@ -33,7 +33,7 @@ import org.integratedmodelling.klab.api.services.ResourcesService;
 })
 public class KlabUrnResolverProcessor extends AbstractProcessor {
   private volatile ContextScope contextScope;
-  private volatile KlabController klabController;
+  private volatile KlabControllerService klabController;
 
   public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
@@ -41,7 +41,7 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
           .displayName("k.LAB Controller Service")
           .description("The k.LAB Controller Service providing the digital twin scope.")
           .required(true)
-          .identifiesControllerService(KlabController.class)
+          .identifiesControllerService(KlabControllerService.class)
           .build();
 
   public static final PropertyDescriptor PROPERTY_KLAB_URN =
@@ -83,7 +83,7 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
   @OnScheduled
   public void initializeScope(final ProcessContext context) {
     klabController =
-        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
+        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabControllerService.class);
 
     // Get the ContextScope from the controller
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
