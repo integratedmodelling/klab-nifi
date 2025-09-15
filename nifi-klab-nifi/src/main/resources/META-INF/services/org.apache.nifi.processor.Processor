@@ -20,4 +20,4 @@ org.integratedmodelling.klab.nifi.ObservationRelayProcessor
 org.integratedmodelling.klab.nifi.ObservationFlowFileInit
 org.integratedmodelling.klab.nifi.KlabInputFromJavaExampleProcessor
 org.integratedmodelling.klab.nifi.KlabUrnResolverProcessor
-org.integratedmodelling.klab.nifi.klabObservation
+org.integratedmodelling.klab.nifi.KlabObservation
