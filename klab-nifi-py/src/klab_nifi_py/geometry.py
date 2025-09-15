@@ -59,20 +59,23 @@ class Time(BaseModel):
             if not self.validate(tstart):
                 raise KlabNifiException("Starting Timestamp is wrong")
         elif isinstance(tstart, datetime):
-            tstart = int(tstart(tz=timezone.utc).timestamp() * 1000)
+            tstart = int(tstart.timestamp() * 1000)
         else:
             raise KlabNifiException("Start Timestamp should either be a int or a datettime object")
         
-        if isinstance(tend, str):
+        if isinstance(tend, int):
             if not self.validate(tend):
                 raise KlabNifiException("End Timestamp is wrong")
         elif isinstance(tend, datetime):
-            tend = int(tend(tz=timezone.utc).timestamp() * 1000)
+            tend = int(tend.timestamp() * 1000)
         else:
-            raise KlabNifiException("Start Timestamp should either be a int or a datettime object")
+            raise KlabNifiException("End Timestamp should either be a int or a datettime object")
         
         if tunit.lower() not in self.TIME_SCALES:
             raise KlabNifiException("Time Unit is wrong")
+        
+        if tstart > tend:
+            raise KlabNifiException("Start Time cannot be greater than End Time")
 
 
         self.tstart = tstart
@@ -82,12 +85,12 @@ class Time(BaseModel):
 
     @staticmethod
     def validate(timestamp_str:int)->bool:
+        '''
+        validate the int timestamp
+        '''
         try:
             ts_ms = int(timestamp_str)
-            # Convert milliseconds to seconds
             ts_sec = ts_ms / 1000
-
-            # Try converting to datetime (will raise if out of range)
             datetime.utcfromtimestamp(ts_sec)
             return True
         except (ValueError, OverflowError):
