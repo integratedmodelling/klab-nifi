@@ -129,6 +129,14 @@ public class KlabObservationNifiRequest {
                     this.shape = shape;
                     return this;
                 }
+                public KlabObservationNifiRequest.Geometry.Space.Builder setShape(
+                        double minX, double minY, double maxX, double maxY) {
+                    this.shape =
+                            String.format(
+                                    "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
+                                    minX, minY, maxX, minY, maxX, maxY, minX, maxY, minX, minY);
+                    return this;
+                }
 
                 public KlabObservationNifiRequest.Geometry.Space.Builder setGrid(String sgrid) {
                     this.sgrid = sgrid;
@@ -194,7 +202,10 @@ public class KlabObservationNifiRequest {
                     return this;
                 }
 
-                public KlabObservationNifiRequest.Geometry.Time.Builder setTime(Date start, Date end) {
+                public KlabObservationNifiRequest.Geometry.Time.Builder setTime(Date start, Date end) throws KlabNifiException {
+                    if (start.after(end)) {
+                        throw new KlabNifiException("Start time can't be more than the end time");
+                    }
                     this.tstart = start.toInstant().toEpochMilli();
                     this.tend = end.toInstant().toEpochMilli();
                     return this;
