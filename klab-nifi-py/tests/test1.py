@@ -12,18 +12,11 @@ time = Time(
 
 
 
-obs = Observation(
-    name = "AM1729",
-    semantics="earth:Terrestrial earth:Region"
-)
-
-obs.name = "777"
-
-
-klabNifiObs = KlabNifiRequest(
+klabNifiObs = KlabObservationNifiRequest(
     space = space, 
     time = time,
-    observation=obs
+    observationName= "AM1729",
+    observationSemantics= "earth:Terrestrial earth:Region"
 )
 
 print (klabNifiObs.to_dict())

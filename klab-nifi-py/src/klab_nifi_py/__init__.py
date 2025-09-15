@@ -1,5 +1,4 @@
 from .geometry import *
-from .observation import Observation
 from .logging import logger
 import requests
 import logging
@@ -7,7 +6,7 @@ import logging
 
 NIFI_HEALTHCHECK_PATH = "/healthcheck"
 
-class KlabNifiRequest(BaseModel):
+class KlabObservationNifiRequest(BaseModel):
     '''
     The Main Observation Class in Python for creating the JSON Payload passing to 
     the Observation Relay Processor through the flowfile. use the method `to_dict()`
@@ -19,23 +18,32 @@ class KlabNifiRequest(BaseModel):
     '''
 
     def __init__(self, 
+                 observationName:str=None,
+                 observationSemantics:str=None,
                  space:Space=None,
                  time:Time=None,
-                 observation:Observation=None,
                  loglevel:str=logging.INFO):
         
         logger.debug("KLAB Nifi Observation Initialized")
         logger.info("Building the Nifi Observation")
         logger.setLevel(loglevel)
 
+        if not observationName :
+            raise KlabNifiException("Observation Name cannot be non null")
+        
+        if not observationSemantics:
+            raise KlabNifiException("Observation Query must be made with a Semantics")
+
+        logger.info("Setting Name and Semantics to the Observation")
+        self.name = observationName
+
+        ## To check how can we validate the semantics here without the Python Client
+        ## Keeping it as it is for now
+        self.semantics = observationSemantics 
+
         if space and time :
             logger.debug("Setting Geometry")
             self.geometry = Geometry(space, time)
-
-        logger.debug("Setting Observation")
-        if not observation:
-            raise KlabNifiException("Observation can't be null")
-        self.observation = observation
 
         logger.info("Initial Validations Passed, Observation Payload Created")
 
@@ -69,7 +77,7 @@ class KlabNifiListenHTTPClient:
         logger.info("HealthCheck for ListenHTTP Processor successful")
 
 
-    def submitObservation(self, obs:KlabNifiRequest):
+    def submitObservation(self, obs:KlabObservationNifiRequest):
         logger.debug("Making a Post Request to the Nifi Listen HTTP Endpoint")
 
         if not obs:

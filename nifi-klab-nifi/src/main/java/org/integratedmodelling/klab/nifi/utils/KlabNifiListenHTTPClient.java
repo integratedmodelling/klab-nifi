@@ -28,7 +28,7 @@ public class KlabNifiListenHTTPClient {
      * @param req the observation payload
      * @throws Exception if the health check or post request fails
      */
-    public void submitObservation(KlabNifiRequest req) throws Exception {
+    public void submitObservation(KlabObservationNifiRequest req) throws Exception {
         System.out.println("Submitting Observation to the NiFi ListenHTTP Processor");
 
         // Optional Health Check if set up in the ListenHTTP Processor in the Nifi Flow

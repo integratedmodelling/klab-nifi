@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.behavior.InputRequirement; 
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXT_PROJ; 
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiRequest;
+import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl; 
 import org.integratedmodelling.klab.api.knowledge.Observable; 
@@ -119,12 +119,12 @@ public class klabObservation extends AbstractProcessor {
             } 
             
             final GsonBuilder builder = new GsonBuilder();
-            AtomicReference<KlabNifiRequest> req = new AtomicReference<>();
+            AtomicReference<KlabObservationNifiRequest> req = new AtomicReference<>();
 
             Gson gson = builder.create(); // Read JSON directly from FlowFile input stream 
             session.read(flowfile, in -> {
                 try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
-                        req.set(gson.fromJson(reader, KlabNifiRequest.class));
+                        req.set(gson.fromJson(reader, KlabObservationNifiRequest.class));
 
                 } catch (Exception e) {
                     getLogger().error("Error reading JSON", e);
@@ -135,7 +135,7 @@ public class klabObservation extends AbstractProcessor {
 
             // The Observable from the Semantics URN with the Reasoner Client
             Observable observable = contextScope.getService(Reasoner.class).resolveObservable(
-                    req.get().getObservation().getSemantics()
+                    req.get().getObservationSemantics()
             );
 
             Gson prettyGson = new GsonBuilder()
@@ -160,8 +160,8 @@ public class klabObservation extends AbstractProcessor {
 
             ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
             obs.setGeometry(geometry.build());
-            obs.setName(req.get().getObservation().getName());
-            obs.setUrn(req.get().getObservation().getSemantics());
+            obs.setName(req.get().getObservationName());
+            obs.setUrn(req.get().getObservationSemantics());
             obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
             getLogger().info("Observation Payload Generation done, submitting the Observation");
 

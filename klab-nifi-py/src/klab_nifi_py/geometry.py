@@ -55,14 +55,22 @@ class Time(BaseModel):
                  tscope: int=1,
                  tunit:str="year"):
         
-        if isinstance(tstart, str):
+        if isinstance(tstart, int):
             if not self.validate(tstart):
                 raise KlabNifiException("Starting Timestamp is wrong")
+        elif isinstance(tstart, datetime):
+            tstart = int(tstart(tz=timezone.utc).timestamp() * 1000)
+        else:
+            raise KlabNifiException("Start Timestamp should either be a int or a datettime object")
         
         if isinstance(tend, str):
             if not self.validate(tend):
                 raise KlabNifiException("End Timestamp is wrong")
-            
+        elif isinstance(tend, datetime):
+            tend = int(tend(tz=timezone.utc).timestamp() * 1000)
+        else:
+            raise KlabNifiException("Start Timestamp should either be a int or a datettime object")
+        
         if tunit.lower() not in self.TIME_SCALES:
             raise KlabNifiException("Time Unit is wrong")
 
@@ -73,10 +81,7 @@ class Time(BaseModel):
         self.tscope = tscope
 
     @staticmethod
-    def validate(timestamp_str:str)->bool:
-        if not timestamp_str.isdigit():
-            return False
-        
+    def validate(timestamp_str:int)->bool:
         try:
             ts_ms = int(timestamp_str)
             # Convert milliseconds to seconds

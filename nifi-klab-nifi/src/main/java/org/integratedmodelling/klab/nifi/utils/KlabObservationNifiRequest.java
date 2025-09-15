@@ -13,13 +13,15 @@ import org.locationtech.jts.io.ParseException;
  * Processor in order to convert the post payload, to an equivalent Nifi Flowfile
  * using {@link KlabNifiListenHTTPClient}
  */
-public class KlabNifiRequest {
+public class KlabObservationNifiRequest {
     private final Geometry geometry;
-    private final Observation observation;
+    private final String name;
+    private final String semantics;
 
-    private KlabNifiRequest(Builder builder) {
+    private KlabObservationNifiRequest(Builder builder) {
         this.geometry = builder.geometry;
-        this.observation = builder.observation;
+        this.name = builder.name;
+        this.semantics = builder.semantics;
     }
 
     /** Serialize this object to JSON */
@@ -33,26 +35,38 @@ public class KlabNifiRequest {
         return geometry;
     }
 
-    public Observation getObservation() {
-        return observation;
+    public String getObservationName() {
+        return name;
+    }
+
+    public String getObservationSemantics(){
+        return semantics;
     }
 
     public static class Builder {
         private Geometry geometry;
-        private Observation observation;
+        private String name;
+        private String semantics;
+
+        
 
         public Builder setGeometry(Geometry geometry) {
             this.geometry = geometry;
             return this;
         }
 
-        public Builder setObservation(Observation observation) {
-            this.observation = observation;
+        public Builder setObservationName(String name) {
+            this.name = name;
             return this;
         }
 
-        public KlabNifiRequest build() {
-            return new KlabNifiRequest(this);
+        public Builder setObservationSemantics(String semantics){
+            this.semantics = semantics;
+            return this;
+        }
+
+        public KlabObservationNifiRequest build() {
+            return new KlabObservationNifiRequest(this);
         }
     }
 
@@ -230,42 +244,4 @@ public class KlabNifiRequest {
         }
     }
 
-    // -------------------- Observation --------------------
-    public static class Observation {
-        private final String name;
-        private final String semantics;
-
-        private Observation(Builder builder) {
-            this.name = builder.name;
-            this.semantics = builder.semantics;
-        }
-
-        /** Getters */
-        public String getName() {
-            return name;
-        }
-
-        public String getSemantics() {
-            return semantics;
-        }
-
-        public static class Builder {
-            private String name;
-            private String semantics;
-
-            public Builder setName(String name) {
-                this.name = name;
-                return this;
-            }
-
-            public Builder setSemantics(String semantics) {
-                this.semantics = semantics;
-                return this;
-            }
-
-            public Observation build() {
-                return new Observation(this);
-            }
-        }
-    }
 }
