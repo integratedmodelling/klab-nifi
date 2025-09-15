@@ -89,7 +89,10 @@ public class KlabNifiListenHTTPClient {
             return this;
         }
 
-        public KlabNifiListenHTTPClient build() {
+        public KlabNifiListenHTTPClient build() throws KlabNifiException{
+            if (this.host == null || this.port == null) {
+                throw new KlabNifiException("Host or Port is null and is required for the client");
+            }
             return new KlabNifiListenHTTPClient(this);
         }
     }
