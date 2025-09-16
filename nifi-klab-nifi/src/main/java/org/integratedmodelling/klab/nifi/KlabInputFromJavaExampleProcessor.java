@@ -1,9 +1,10 @@
 package org.integratedmodelling.klab.nifi;
 
-import java.util.List;
-import java.util.Set;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 
 import com.google.gson.Gson;
+import java.util.List;
+import java.util.Set;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -13,9 +14,8 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
-
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
+import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
+import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
 /** An example processor that builds a valid flowfile. */
 @Tags({"k.LAB", "source", "example"})
@@ -23,17 +23,17 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
 
-  public static final PropertyDescriptor KLAB_JAVA_INPUT_EXAMPLE =
+  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
-          .name("klab-java-input-example")
-          .displayName("k.LAB Input example for Java")
+          .name("klab-controller-service")
+          .displayName("k.LAB Controller Service")
           .description("This is an example on how to use the Java utilities.")
           .required(true)
           .identifiesControllerService(KlabController.class)
           .build();
 
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-      List.of(KLAB_JAVA_INPUT_EXAMPLE);
+      List.of(KLAB_CONTROLLER_SERVICE);
 
   public static final Relationship REL_FAILURE =
       new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -56,7 +56,7 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
   @Override
   public Set<Relationship> getRelationships() {
     return Set.of(REL_FAILURE, REL_SUCCESS);
-    }
+  }
 
   @Override
   protected void init(final ProcessorInitializationContext context) {
@@ -73,7 +73,7 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
   @OnScheduled
   public void onScheduled(final ProcessContext context) {
     final KlabController controllerService =
-            context.getProperty(KLAB_JAVA_INPUT_EXAMPLE).asControllerService(KlabController.class);
+        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
 
     isRunning = true;
   }
@@ -84,24 +84,44 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
       return;
     }
 
-    var requestBuilder =
-        new KlabNifiInputRequest.Builder()
-            .setProjection("EPSG:4326")
+    KlabObservationNifiRequest.Builder requestBuilder = null;
+    try {
+    var builder = new KlabObservationNifiRequest.Builder();
+
+    var space = new KlabObservationNifiRequest.Geometry.Space.Builder()
+            .setProj("EPSG:4326")
             .setShape(
-                "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
-            .setSgrid("1.km")
+                    "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
+            .setGrid("1.km")
+            .build();
+
+    var time = new KlabObservationNifiRequest.Geometry.Time.Builder()
             .setTime(1325376000000L, 1356998400000L)
-            .setScope(1.0, "year")
-            .setName("testing")
-            .setUrn("earth:Terrestrial earth:Region");
+            .setTscope(1).setTunit("year")
+            .build();
+
+    var geometry = new KlabObservationNifiRequest.Geometry.Builder()
+            .setSpace(space)
+            .setTime(time)
+            .build();
+
+    requestBuilder = builder.setObservationName("testing")
+            .setObservationSemantics("earth:Terrestrial earth:Region")
+            .setGeometry(geometry);
+
+    } catch (KlabNifiException e) {
+      throw new ProcessException(e);
+    }
+
     try {
       FlowFile flowFile = session.create();
+      KlabObservationNifiRequest request = requestBuilder.build();
       flowFile =
           session.write(
               flowFile,
               out -> {
                 // Write event data to FlowFile content
-                out.write(new Gson().toJson(requestBuilder).getBytes());
+                out.write(new Gson().toJson(request).getBytes());
               });
 
       // Add attributes from event

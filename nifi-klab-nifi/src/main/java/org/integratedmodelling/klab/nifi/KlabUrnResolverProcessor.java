@@ -12,16 +12,13 @@ import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.processor.AbstractProcessor;
-import org.apache.nifi.processor.ProcessContext;
-import org.apache.nifi.processor.ProcessSession;
-import org.apache.nifi.processor.Relationship;
+import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
+import org.integratedmodelling.klab.api.services.ResourcesService;
 
 @ReadsAttributes({
   @ReadsAttribute(
@@ -30,7 +27,7 @@ import org.integratedmodelling.klab.api.services.Reasoner;
 })
 public class KlabUrnResolverProcessor extends AbstractProcessor {
   private volatile ContextScope contextScope;
-  private volatile KlabControllerService klabController;
+  private volatile KlabController klabController;
 
   public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
@@ -38,38 +35,15 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
           .displayName("k.LAB Controller Service")
           .description("The k.LAB Controller Service providing the digital twin scope.")
           .required(true)
-          .identifiesControllerService(KlabControllerService.class)
-          .build();
-
-  public static final PropertyDescriptor PROPERTY_KLAB_URN =
-      new PropertyDescriptor.Builder()
-          .name("URN")
-          .displayName("k.LAB URN")
-          .description("URN that references a valid k.LAB semantic concept")
-          .required(true)
-          .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-          .build();
-
-  public static final Relationship REL_SUCCESS =
-      new Relationship.Builder()
-          .name("success")
-          .description("On Success from the Processor")
-          .build();
-
-  public static final Relationship REL_FAILURE =
-      new Relationship.Builder()
-          .name("failure")
-          .description("On Failure from the Processor")
+          .identifiesControllerService(KlabController.class)
           .build();
 
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-      List.of(KLAB_CONTROLLER_SERVICE, PROPERTY_KLAB_URN);
-
-  public static Set<Relationship> RELATIONSHIPS = Set.of(REL_SUCCESS, REL_FAILURE);
+          List.of(KLAB_CONTROLLER_SERVICE);
 
   @Override
   public Set<Relationship> getRelationships() {
-    return RELATIONSHIPS;
+    return relationships;
   }
 
   @Override
@@ -77,10 +51,26 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
     return PROPERTY_DESCRIPTORS;
   }
 
+  public static final Relationship REL_SUCCESS = new Relationship.Builder()
+          .name("success")
+          .description("Successfully Resolved k.LAB URN")
+          .build();
+
+  public static final Relationship REL_FAILURE = new Relationship.Builder()
+          .name("failure")
+          .description("Resolution of k.LAB URN Failed")
+          .build();
+
+  private Set<Relationship> relationships;
+
+  @Override
+  protected void init(final ProcessorInitializationContext context) {
+    relationships = Set.of(REL_SUCCESS, REL_FAILURE);
+  }
+
   @OnScheduled
   public void initializeScope(final ProcessContext context) {
-    klabController =
-        context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabControllerService.class);
+    klabController = context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
 
     // Get the ContextScope from the controller
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
@@ -128,6 +118,8 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
     }
 
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
+    var solved = contextScope.getService(ResourcesService.class).resolve(urn, contextScope);
+    var solved_reason = contextScope.getService(Reasoner.class).resolveConcept(urn);
     var solved_observable = contextScope.getService(Reasoner.class).resolveObservable(urn);
 
     getLogger().info("Solved Observable" + solved_observable.getUrn());
