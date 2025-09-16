@@ -2,6 +2,7 @@ package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Type;
@@ -36,6 +37,7 @@ import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.runtime.Message;
+import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
 
 /**
  * Submit observations (unresolved or resolved through adapter metadata) and output their
@@ -188,6 +190,19 @@ public class ObservationRelayProcessor extends AbstractProcessor {
       return;
     }
 
+    JsonObject flowFileAsJson = null;
+    try (final InputStream in = session.read(flowFile);
+         final InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+      final JsonElement root = JsonParser.parseReader(reader);
+
+      flowFileAsJson = root.getAsJsonObject();
+    } catch (final IOException e) {
+      getLogger().error("Failed to read FlowFile content due to {}", new Object[] {e}, e);
+    }
+
+    var observableJson = flowFileAsJson.getAsJsonObject("observation");
+    flowFileAsJson.remove("observation");
+
     AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
 
     final GsonBuilder builder = new GsonBuilder();
@@ -198,11 +213,11 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     builder.registerTypeAdapter(Parameters.class, new ParametersTypeAdapter());
     Gson gson = builder.create();
     try {
-      session.read(flowFile, in -> {
-        ObservationImpl obs = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), ObservationImpl.class);
-        observationRef.set(obs);
+
+        var obs = gson.fromJson(flowFileAsJson, KlabNifiInputRequest.class);
+        String jsonObservation = obs.requestToJson(gson.fromJson(observableJson, Observable.class));
+        observationRef.set(gson.fromJson(jsonObservation, ObservationImpl.class));
         getLogger().info("Read some observation...");
-      });
     } catch (Exception e) {
       getLogger().error("Error reading observation from FlowFile", e);
       session.transfer(flowFile, REL_FAILURE);

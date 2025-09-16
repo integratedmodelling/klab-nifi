@@ -4,7 +4,6 @@ import com.google.gson.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -18,13 +17,11 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
-import org.integratedmodelling.klab.api.services.ResourcesService;
 
 @ReadsAttributes({
   @ReadsAttribute(
@@ -106,12 +103,14 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
     String urn = null;
     var flowFile = session.get();
+
+    JsonObject jsonObject = null;
     try (final InputStream in = session.read(flowFile);
         final InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
       final JsonElement root = JsonParser.parseReader(reader);
 
       if (root.isJsonObject()) {
-        final JsonObject jsonObject = root.getAsJsonObject();
+        jsonObject = root.getAsJsonObject();
         if (jsonObject.has("urn")) {
           final JsonElement element = jsonObject.get("urn");
           urn = element.getAsString();
@@ -129,32 +128,24 @@ public class KlabUrnResolverProcessor extends AbstractProcessor {
     }
 
     contextScope = (ContextScope) klabController.getScope(ContextScope.class);
-    var solved = contextScope.getService(ResourcesService.class).resolve(urn, contextScope);
-    var solved_reason = contextScope.getService(Reasoner.class).resolveConcept(urn);
     var solved_observable = contextScope.getService(Reasoner.class).resolveObservable(urn);
-    
-    getLogger().info("Solved Concept"  + solved_reason.getUrn());
+
     getLogger().info("Solved Observable" + solved_observable.getUrn());
     final GsonBuilder builder = new GsonBuilder();
     builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
 
     Gson gson = builder.create();
-    getLogger().warn(solved.toString());
-    var observable = solved.getResults().stream().findFirst().orElseThrow(() -> new ProcessException("Cannot resolve the provided URN."));
-
+    JsonObject finalJsonObject = jsonObject;
     flowFile =
         session.write(
             flowFile,
-            new OutputStreamCallback() {
-              @Override
-              public void process(OutputStream out) {
-                String asJson = gson.toJson(solved_observable);
-                try {
-                  out.write(asJson.getBytes(StandardCharsets.UTF_8));
-                  getLogger().info("Writing observable to the flowfile.");
-                } catch (Exception e) {
-                  throw new ProcessException("Error writing content", e);
-                }
+            out -> {
+              finalJsonObject.add("observable", gson.toJsonTree(solved_observable));
+              try {
+                out.write(finalJsonObject.getAsString().getBytes(StandardCharsets.UTF_8));
+                getLogger().info("Writing observable to the flowfile.");
+              } catch (Exception e) {
+                throw new ProcessException("Error writing content", e);
               }
             });
 
