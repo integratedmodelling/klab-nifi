@@ -29,7 +29,7 @@ import org.integratedmodelling.klab.api.knowledge.*;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
+import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
 @Tags({"k.LAB", "source", "event-driven"})
 @CapabilityDescription("Generates FlowFiles for the Observation Relay Processor")
@@ -106,12 +106,12 @@ public class ObservationFlowFileInit extends AbstractProcessor {
       return;
     }
 
-    KlabNifiInputRequest request = null;
+    KlabObservationNifiRequest request = null;
     try (final InputStream in = session.read(flowFile);
         final InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
       var json = JsonParser.parseReader(reader);
       request =
-          new Gson().fromJson(json.getAsJsonObject().getAsString(), KlabNifiInputRequest.class);
+          new Gson().fromJson(json.getAsJsonObject().getAsString(), KlabObservationNifiRequest.class);
     } catch (final IOException e) {
       getLogger().error("Failed to read FlowFile content due to {}", new Object[] {e}, e);
     }

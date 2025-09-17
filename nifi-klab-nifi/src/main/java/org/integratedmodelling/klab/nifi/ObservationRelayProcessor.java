@@ -37,7 +37,7 @@ import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.runtime.Message;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
+import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
 /**
  * Submit observations (unresolved or resolved through adapter metadata) and output their
@@ -214,9 +214,9 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     Gson gson = builder.create();
     try {
 
-        var obs = gson.fromJson(flowFileAsJson, KlabNifiInputRequest.class);
-        String jsonObservation = obs.requestToJson(gson.fromJson(observableJson, Observable.class));
-        observationRef.set(gson.fromJson(jsonObservation, ObservationImpl.class));
+        var obs = gson.fromJson(flowFileAsJson, KlabObservationNifiRequest.class);
+        //String jsonObservation = obs.toJson(gson.fromJson(observableJson, Observable.class));
+        //observationRef.set(gson.fromJson(jsonObservation, ObservationImpl.class));
         getLogger().info("Read some observation...");
     } catch (Exception e) {
       getLogger().error("Error reading observation from FlowFile", e);
