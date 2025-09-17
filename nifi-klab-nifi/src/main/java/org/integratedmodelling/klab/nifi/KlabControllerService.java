@@ -66,7 +66,7 @@ public class KlabControllerService extends AbstractControllerService implements 
           .name("URL")
           .displayName("Digital Twin URL")
           .description("The URL for the digital twin to connect to")
-          .required(true)
+          .required(false)
           .addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
