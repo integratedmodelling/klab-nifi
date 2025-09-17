@@ -2,6 +2,9 @@ package org.integratedmodelling.klab.nifi.utils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Date;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
@@ -16,11 +19,13 @@ public class KlabObservationNifiRequest {
     private final Geometry geometry;
     private final String name;
     private final String semantics;
+    private final String digitalTwinUrl;
 
     private KlabObservationNifiRequest(Builder builder) {
         this.geometry = builder.geometry;
         this.name = builder.name;
         this.semantics = builder.semantics;
+        this.digitalTwinUrl = builder.digitalTwinUrl;
     }
 
     /** Serialize this object to JSON */
@@ -42,12 +47,15 @@ public class KlabObservationNifiRequest {
         return semantics;
     }
 
+    public String getDigitalTwinUrl() {
+        return digitalTwinUrl;
+    }
+
     public static class Builder {
         private Geometry geometry;
         private String name;
         private String semantics;
-
-        
+        private String digitalTwinUrl;
 
         public Builder setGeometry(Geometry geometry) {
             this.geometry = geometry;
@@ -64,6 +72,11 @@ public class KlabObservationNifiRequest {
             return this;
         }
 
+        public Builder setDigitalTwinUrl(String digitalTwinUrl) throws MalformedURLException {
+            this.digitalTwinUrl = String.valueOf(new URL(digitalTwinUrl));
+            return this;
+        }
+
         public KlabObservationNifiRequest build() throws KlabNifiException{
             if (this.name == null) {
                 throw new KlabNifiException("Submitted Observation must have a Name");
@@ -72,6 +85,8 @@ public class KlabObservationNifiRequest {
             if (this.semantics == null) {
                 throw new KlabNifiException("Submitted Observation must have a Semantics");
             }
+
+            // No need for a DT URL
 
             return new KlabObservationNifiRequest(this);
         }

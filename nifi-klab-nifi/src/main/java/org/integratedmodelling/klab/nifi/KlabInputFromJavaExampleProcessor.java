@@ -3,6 +3,8 @@ package org.integratedmodelling.klab.nifi;
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 
 import com.google.gson.Gson;
+
+import java.net.MalformedURLException;
 import java.util.List;
 import java.util.Set;
 import org.apache.nifi.annotation.behavior.InputRequirement;
@@ -14,6 +16,7 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
@@ -32,8 +35,17 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
           .identifiesControllerService(KlabController.class)
           .build();
 
+  public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
+          new PropertyDescriptor.Builder()
+                  .name("URL")
+                  .displayName("Digital Twin URL")
+                  .description("The URL for the digital twin to connect to")
+                  .required(false)
+                  .addValidator(StandardValidators.URL_VALIDATOR)
+                  .build();
+
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-      List.of(KLAB_CONTROLLER_SERVICE);
+      List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY);
 
   public static final Relationship REL_FAILURE =
       new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -109,11 +121,15 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
             .setObservationSemantics("earth:Terrestrial earth:Region")
             .setGeometry(geometry);
 
-    } catch (KlabNifiException e) {
+    if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
+      requestBuilder.setDigitalTwinUrl(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
+    }
+
+    } catch (KlabNifiException | MalformedURLException e) {
       throw new ProcessException(e);
     }
 
-    try {
+      try {
       FlowFile flowFile = session.create();
       KlabObservationNifiRequest request = requestBuilder.build();
       flowFile =
