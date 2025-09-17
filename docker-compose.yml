@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  nifi:
+    image: apache/nifi:2.4.0
+    ports:
+      - "8443:8443"
+      - "3306:3306"
+      - "3307:3307"
+    volumes:
+      - ./custom-nars:/opt/nifi/custom-nars
+      - ./nifi_input:/opt/nifi/input
+      - ./nifi_output:/opt/nifi/output
+      - ./klab-nifi-py/src/klab_nifi_py:/opt/nifi/py_scripts
+      - ./klab:/home/nifi/.klab
+    environment:
+      - NIFI_CUSTOM_NARS_DIR=./custom-nars
+      - NIFI_INPUT_DIR=./nifi_input
+      - NIFI_OUTPUT_DIR=./nifi_output
+      - NIFI_PY_SCRIPTS_DIR=./py_scripts
+      - NIFI_KLAB_DIR=./klab
+    entrypoint: >
+      bash -c "
+        echo 'Copying custom NARs to lib...' &&
+        cp /opt/nifi/custom-nars/*.nar /opt/nifi/nifi-current/lib/ &&
+        cp -r /opt/nifi/py_scripts/* /opt/nifi/nifi-current/python_extensions/ &&
+        echo 'Starting NiFi...' &&
+        /opt/nifi/scripts/start.sh
+      "

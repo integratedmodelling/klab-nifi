@@ -1,12 +1,15 @@
 package org.integratedmodelling.klab.nifi;
 
+import com.google.gson.*;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -19,14 +22,26 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.integratedmodelling.common.knowledge.ConceptImpl;
+import org.integratedmodelling.common.knowledge.ObservableImpl;
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.collections.Parameters;
+import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
+import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
+import org.integratedmodelling.klab.api.data.Metadata;
+import org.integratedmodelling.klab.api.geometry.Geometry;
+import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
+import org.integratedmodelling.klab.api.knowledge.*;
+import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
+import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.services.runtime.Message;
+import org.integratedmodelling.klab.nifi.utils.KlabNifiInputRequest;
 
 /**
  * Submit observations (unresolved or resolved through adapter metadata) and output their
- * resolved/accepted version. tAlso output any related events through the `events` relationship.
+ * resolved/accepted version. Also output any related events through the `events` relationship.
  * Only works if the dataflow is tuned on a digital twin scope.
  *
  * <p>TODO configure to filter for observables, scope, geometry etc.
@@ -88,6 +103,10 @@ public class ObservationRelayProcessor extends AbstractProcessor {
   }
 
   @OnScheduled
+  /*
+    The first call after the basic Validations are passed, it gets the Scope from the Controller Service
+    it needs to interact and relay the observations as required
+   */
   public void initializeScope(final ProcessContext context) {
     isRunning = true;
     klabController =
@@ -100,10 +119,61 @@ public class ObservationRelayProcessor extends AbstractProcessor {
     }
   }
 
+
   @OnStopped
   public void cleanup() {
     isRunning = false;
     eventConsumers.clear();
+  }
+
+  class ObservableTypeAdapter implements JsonDeserializer<Observable> {
+    @Override
+    public Observable deserialize(
+        JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ObservableImpl.class);
+    }
+  }
+
+  class MetadataTypeAdapter implements JsonDeserializer<Metadata> {
+    @Override
+    public Metadata deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, MetadataImpl.class);
+    }
+  }
+
+  class ConceptTypeAdapter implements JsonDeserializer<Concept> {
+    @Override
+    public Concept deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ConceptImpl.class);
+    }
+  }
+
+  class GeometryTypeAdapter implements JsonDeserializer<Geometry> {
+    @Override
+    public Geometry deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, GeometryImpl.class);
+    }
+  }
+
+  class ParametersTypeAdapter implements JsonDeserializer<Parameters> {
+    @Override
+    public Parameters deserialize(
+            JsonElement json, Type typeOfT, JsonDeserializationContext context)
+            throws JsonParseException {
+      JsonObject jsonObject = json.getAsJsonObject();
+      return context.deserialize(jsonObject, ParametersImpl.class);
+    }
   }
 
   @Override
@@ -116,72 +186,80 @@ public class ObservationRelayProcessor extends AbstractProcessor {
 
     FlowFile flowFile = session.get();
     if (flowFile == null) {
+      getLogger().error("Flowfile is null.. :)))");
       return;
     }
 
-    try {
-      // Read the incoming FlowFile as an Observation
-      session.read(
-          flowFile,
-          in -> {
-            var observation = Utils.Json.load(in, Observation.class);
-            if (observation == null) {
-              session.transfer(flowFile, REL_FAILURE);
-              return;
-            }
+    JsonObject flowFileAsJson = null;
+    try (final InputStream in = session.read(flowFile);
+         final InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+      final JsonElement root = JsonParser.parseReader(reader);
 
-            // TODO add listener
-
-            // Submit the observation to the context scope
-            var future =
-                contextScope
-                    .submit(observation)
-                    .exceptionally(
-                        throwable -> {
-
-                          // Transfer to failure if resolution returned null
-                          session.transfer(flowFile, REL_FAILURE);
-                          // TODO remove listener
-                          return observation;
-                        })
-                    .thenApply(
-                        resolvedObservation -> {
-                          FlowFile successFlowFile = session.create(flowFile);
-                          successFlowFile =
-                              session.write(
-                                  successFlowFile,
-                                  out -> {
-                                    try {
-                                      // Serialize the resolved observation to the output stream
-                                      serializeObservation(resolvedObservation, out);
-                                    } catch (IOException e) {
-                                      getLogger()
-                                          .error(
-                                              "Failed to write resolved observation to FlowFile",
-                                              e);
-                                      throw new ProcessException("Failed to write observation", e);
-                                    }
-                                  });
-
-                          // Add relevant attributes
-                          Map<String, String> attributes = new HashMap<>();
-                          // TODO
-                          attributes.put("observation.id", resolvedObservation.getId() + "");
-                          attributes.put(
-                              "observation.type", resolvedObservation.getType().toString());
-                          successFlowFile = session.putAllAttributes(successFlowFile, attributes);
-
-                          // Transfer to success relationship
-                          session.transfer(successFlowFile, REL_SUCCESS);
-                          session.remove(flowFile);
-                          // TODO remove listener
-                          return resolvedObservation;
-                        });
-          });
-    } catch (Exception e) {
-      getLogger().error("Error processing observation", e);
-      session.transfer(flowFile, REL_FAILURE);
+      flowFileAsJson = root.getAsJsonObject();
+    } catch (final IOException e) {
+      getLogger().error("Failed to read FlowFile content due to {}", new Object[] {e}, e);
     }
+
+    var observableJson = flowFileAsJson.getAsJsonObject("observation");
+    flowFileAsJson.remove("observation");
+
+    AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
+
+    final GsonBuilder builder = new GsonBuilder();
+    builder.registerTypeAdapter(Observable.class, new ObservableTypeAdapter());
+    builder.registerTypeAdapter(Metadata.class, new MetadataTypeAdapter());
+    builder.registerTypeAdapter(Concept.class, new ConceptTypeAdapter());
+    builder.registerTypeAdapter(Geometry.class, new GeometryTypeAdapter());
+    builder.registerTypeAdapter(Parameters.class, new ParametersTypeAdapter());
+    Gson gson = builder.create();
+    try {
+
+        var obs = gson.fromJson(flowFileAsJson, KlabNifiInputRequest.class);
+        String jsonObservation = obs.requestToJson(gson.fromJson(observableJson, Observable.class));
+        observationRef.set(gson.fromJson(jsonObservation, ObservationImpl.class));
+        getLogger().info("Read some observation...");
+    } catch (Exception e) {
+      getLogger().error("Error reading observation from FlowFile", e);
+      session.transfer(flowFile, REL_FAILURE);
+      return;
+    }
+
+
+    Observation observation = observationRef.get();
+
+    if (observation == null) {
+      getLogger().error("Found the observation to be null...");
+      session.transfer(flowFile, REL_FAILURE);
+      return;
+    }
+
+    session.remove(flowFile); // remove the incoming flowfile, and create another one
+
+    FlowFile successFlowFile = session.create(flowFile);
+
+      try {
+        CompletableFuture<Observation> future = contextScope.submit(observation);
+        Observation resolvedObservation = future.get();
+
+        session.write(successFlowFile, out ->{
+          serializeObservation(resolvedObservation, out);
+        });
+
+        Map<String, String> attributes = new HashMap<>();
+
+        attributes.put("observation.id", resolvedObservation.getId() + "");
+        attributes.put("observation.type", resolvedObservation.getType().toString());
+
+        successFlowFile = session.putAllAttributes(successFlowFile, attributes);
+
+        getLogger().info("Success Flowfile being sent to Success Relation..");
+        session.transfer(successFlowFile, REL_SUCCESS);
+
+      } catch (Exception e) {
+        getLogger().error("Error in processing Observation: " , e);
+        getLogger().info("Routing Success Flowfile to Failure Rel");
+        session.transfer(successFlowFile, REL_FAILURE);
+      }
   }
 
   private void handleEventData(EventData eventData, ProcessSession session) {
