@@ -4,3 +4,4 @@ custom-nars
 .mvn/wrapper/maven-wrapper.jar
 *.egg-info
 **/__pycache__
+docker-compose.yml
