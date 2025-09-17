@@ -16,6 +16,10 @@
  */
 package org.integratedmodelling.klab.nifi;
 
+import java.io.File;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -29,6 +33,7 @@ import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
+import org.integratedmodelling.common.authentication.KlabCertificateImpl;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
@@ -58,7 +63,7 @@ public class KlabControllerService extends AbstractControllerService implements 
           .displayName("k.LAB Certificate")
           .description("The URL for the k.LAB certificate to use for authentication")
           .required(false)
-          //.addValidator(StandardValidators.URL_VALIDATOR)
+          .addValidator(StandardValidators.URL_VALIDATOR)
           .build();
 
   public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
@@ -115,12 +120,30 @@ public class KlabControllerService extends AbstractControllerService implements 
   private final Set<Consumer<EventData>> eventListeners = ConcurrentHashMap.newKeySet();
   private final ExecutorService eventExecutor = Executors.newCachedThreadPool();
 
-  @OnEnabled
-  public void onEnabled(final ConfigurationContext context) throws InitializationException {
+  public void onEnabled(final ConfigurationContext context)
+      throws InitializationException, URISyntaxException {
     // ... existing code ...
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
-    // TODO find certificate through properties
-    this.userScope = engine.authenticate();
+
+    var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
+    final boolean useDefaultPath = certificateProperty.isBlank();
+    if (useDefaultPath) {
+      this.userScope = engine.authenticate();
+    } else {
+
+      var certificateUri = new URI(certificateProperty);
+      var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
+      if (!certificateFile.exists()) {
+        throw new InitializationException("Cannot find a certificate at: " + certificateProperty);
+      }
+      var certificate = KlabCertificateImpl.createFromFile(certificateFile);
+      if (!certificate.isValid()) {
+        throw new InitializationException(
+            "Certificate is not valid: " + certificate.getInvalidityCause());
+      }
+      this.userScope = engine.authenticate(certificate);
+    }
+
     if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
       throw new InitializationException(
           "Unable to authenticate to k.LAB. Authentication is required for operation.");
