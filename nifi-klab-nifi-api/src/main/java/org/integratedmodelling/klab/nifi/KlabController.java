@@ -37,7 +37,11 @@ public interface KlabController extends ControllerService {
    */
   Scope getScope(Class<? extends Scope> scopeClass);
 
+  Scope getScope(String dtURL, Class<? extends Scope> scopeClass);
+
   void addEventListener(Consumer<EventData> listener);
 
   void removeEventListener(Consumer<EventData> listener);
+
+  void addScope(String dtURL, Scope scope);
 }

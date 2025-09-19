@@ -143,11 +143,17 @@ public class KlabObservationWithDT extends AbstractProcessor {
             return;
         }
 
-        ContextScope contextScope = userScope.connect(Utils.URLs.newURL(dtURL));
+        ContextScope contextScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
         if (contextScope == null){
-            getLogger().error("Unable to connect to the Digital Twin " + dtURL);
-            session.transfer(flowfile, REL_FAILURE);
-            return;
+            getLogger().info("No ContextScope available from the KlabController for the DT " + dtURL);
+            contextScope = userScope.connect(Utils.URLs.newURL(dtURL));
+            if (contextScope == null){
+                getLogger().error("Unable to connect to the Digital Twin " + dtURL);
+                session.transfer(flowfile, REL_FAILURE);
+                return;
+            } 
+            klabController.addScope(dtURL, contextScope); // Add the newly created ContextScope to the KlabController Map
+            getLogger().info("Fetched Context Scope successfully from DT: " + dtURL);
         }
 
         // The Observable from the Semantics URN with the Reasoner Client

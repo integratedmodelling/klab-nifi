@@ -237,4 +237,16 @@ public class KlabControllerService extends AbstractControllerService implements 
 
     return new EventData(message.getPayload(message.getMessageType().payloadClass), attributes);
   }
+
+  @Override
+  public Scope getScope(String dtURL, Class<? extends Scope> scopeClass) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'getScope'");
+  }
+
+  @Override
+  public void addScope(String dtURL, Scope scope) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'addScope'");
+  }
 }

@@ -7,7 +7,10 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+
+import org.apache.nifi.annotation.lifecycle.OnDisabled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
@@ -76,14 +79,17 @@ public class KlabFederationControllerService extends AbstractControllerService i
         return this.configuredScope;
     }
 
-    public Scope getScope(String dtURL) {
+    @Override
+    public Scope getScope(String dtURL, Class<? extends Scope> scopeClass) {
         return this.scopeMap.get(dtURL);
     }
+
 
     /*
     Adds ContextScopes to the Scope Map if the relevant Scope
     corresponding to the DT URL if absent
      */
+    @Override
     public void addScope(String dtURL, Scope scope){
         this.scopeMap.putIfAbsent(dtURL, scope);
     }
@@ -157,6 +163,20 @@ public class KlabFederationControllerService extends AbstractControllerService i
         }
     }
 
+    @OnDisabled
+    public void shutdown() {
+        scopeMap.clear();
+        eventListeners.clear();
+        eventExecutor.shutdown();
+        try {
+        if (!eventExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+            eventExecutor.shutdownNow();
+        }
+        } catch (InterruptedException e) {
+        eventExecutor.shutdownNow();
+        Thread.currentThread().interrupt();
+        }
+    }
 
     private void handleKlabMessage(Channel scope, Message message) {
 
