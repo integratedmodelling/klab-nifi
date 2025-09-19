@@ -44,7 +44,8 @@ import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
         + "Also is responsible for some pre validation steps"
         + "Observation processor for the digital twin. Submitted unresolved observations "
         + "will be output as resolved; submitted resolved observations will be output as accepted, "
-        + "or their already present observation will be output instead.")
+        + "or their already present observation will be output instead."
+        + "This would work with multiple Digital Twins in a Federation for Collaborative Working on a Digital Twin")
 
 @WritesAttributes(
         {
@@ -55,11 +56,11 @@ import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 public class KlabObservationWithDT extends AbstractProcessor {
 
     public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =   new PropertyDescriptor.Builder()
-            .name("klab-controller-service")
-            .displayName("k.LAB Controller Service")
-            .description("The k.LAB Controller Service to receive events from")
+            .name("klab-federation-controller-service")
+            .displayName("k.LAB Federation Controller Service")
+            .description("The k.LAB Federation Controller Service for the User Scope at the Federation Level")
             .required(true)
-            .identifiesControllerService(KlabFederationControllerService.class)
+            .identifiesControllerService(KlabController.class)
             .build();
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
@@ -98,9 +99,8 @@ public class KlabObservationWithDT extends AbstractProcessor {
     public void onScheduled(final ProcessContext context) {
         isRunning = true;
         klabController = context.getProperty(KLAB_CONTROLLER_SERVICE)
-                .asControllerService(KlabFederationControllerService.class);
+                .asControllerService(KlabController.class);
         userScope = (UserScope) klabController.getScope(UserScope.class);
-
         if (userScope == null) {
             getLogger().error("No UserScope available from the KlabController, Authentication failed possibly");
         }
@@ -109,15 +109,16 @@ public class KlabObservationWithDT extends AbstractProcessor {
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
 
-        if (!isRunning || userScope == null) {
-            getLogger().error("Problems in Authenticating with the Certificate");
-            context.yield();
-            return;
-        }
-
         FlowFile flowfile = session.get();
         if (flowfile == null){
             getLogger().error("Incoming flowfile to the processor is null :(");
+            return;
+        }
+
+        if (!isRunning || userScope == null) {
+            getLogger().error("Problems in Authenticating with the Certificate");
+            context.yield();
+            session.transfer(flowfile, REL_FAILURE);
             return;
         }
 

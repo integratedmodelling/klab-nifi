@@ -125,6 +125,7 @@ public class KlabObservation extends AbstractProcessor {
             session.read(flowfile, in -> {
                 try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
                         req.set(gson.fromJson(reader, KlabObservationNifiRequest.class));
+                        getLogger().info("Hin");
 
                 } catch (Exception e) {
                     getLogger().error("Error reading JSON", e);

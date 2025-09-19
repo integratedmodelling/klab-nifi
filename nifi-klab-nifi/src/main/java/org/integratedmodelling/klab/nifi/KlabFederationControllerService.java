@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
+import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
@@ -116,6 +117,8 @@ public class KlabFederationControllerService extends AbstractControllerService i
     Make the Auth Call based on the Certificate,
     And get the user scope, and make the connect call with that
      */
+
+    @OnEnabled
     public void onEnabled(final ConfigurationContext context)
             throws InitializationException, URISyntaxException {
 
@@ -124,6 +127,7 @@ public class KlabFederationControllerService extends AbstractControllerService i
 
         var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
         final boolean useDefaultPath = certificateProperty.isBlank();
+        getLogger().info("Processing Certificate");
         if (useDefaultPath) {
             this.userScope = engine.authenticate();
         } else {
@@ -155,12 +159,14 @@ public class KlabFederationControllerService extends AbstractControllerService i
                             userScope.getUser().getUsername());
         }
         this.engine.boot();
-        this.configuredScope = this.userScope;
+        this.configuredScope = this.userScope; // getScope would return the Userscope (and not the context scope) here
 
         // Set up a message listener for the configured scope
         if (this.configuredScope != null) {
             setupMessageListener();
         }
+
+        getLogger().info("Initialization done for the UserScope from the Certificate for the federation");
     }
 
     @OnDisabled
