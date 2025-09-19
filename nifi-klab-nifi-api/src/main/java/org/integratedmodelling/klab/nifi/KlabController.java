@@ -24,7 +24,7 @@ import org.integratedmodelling.klab.api.scope.Scope;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-@Tags({"k.LAB"})
+@Tags({"k.LAB", "Semantic Web"})
 @CapabilityDescription("k.LAB Service API.")
 public interface KlabController extends ControllerService {
 

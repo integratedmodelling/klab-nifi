@@ -22,6 +22,7 @@ class KlabObservationNifiRequest(BaseModel):
                  observationSemantics:str=None,
                  space:Space=None,
                  time:Time=None,
+                 dtURL:str=None,
                  loglevel:str=logging.INFO):
         
         logger.debug("KLAB Nifi Observation Initialized")
@@ -44,6 +45,13 @@ class KlabObservationNifiRequest(BaseModel):
         if space and time :
             logger.debug("Setting Geometry")
             self.geometry = Geometry(space, time)
+
+        if dtURL :
+            logger.debug("Setting the Digital Twin URL")
+            self.digitalTwinUrl = dtURL
+        else:
+            logger.warning("Digital Twin URL not set, the KlabObservation " \
+            "Nifi Processor along with KlabController Service should be used to resolve k.LAB Observations")
 
         logger.info("Initial Validations Passed, Observation Payload Created")
 
