@@ -126,7 +126,7 @@ public class KlabFederationControllerService extends AbstractControllerService i
         this.scopeMap = new ConcurrentHashMap<>();
 
         var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
-        final boolean useDefaultPath = certificateProperty.isBlank();
+        final boolean useDefaultPath = certificateProperty == null || certificateProperty.isBlank();
         getLogger().info("Processing Certificate");
         if (useDefaultPath) {
             this.userScope = engine.authenticate();

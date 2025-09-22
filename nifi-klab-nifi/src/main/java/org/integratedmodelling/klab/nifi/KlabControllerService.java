@@ -124,7 +124,7 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
 
     var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
-    final boolean useDefaultPath = certificateProperty.isBlank();
+    final boolean useDefaultPath = certificateProperty == null || certificateProperty.isBlank();
     if (useDefaultPath) {
       this.userScope = engine.authenticate();
     } else {

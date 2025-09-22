@@ -12,7 +12,7 @@ services:
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
       - ./klab-nifi-py/src/klab_nifi_py:/opt/nifi/py_scripts
-      - C:\Users\arnab.moitra\.klab:/home/nifi/.klab
+      - ./klab:/home/nifi/.klab
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
       - NIFI_INPUT_DIR=./nifi_input
