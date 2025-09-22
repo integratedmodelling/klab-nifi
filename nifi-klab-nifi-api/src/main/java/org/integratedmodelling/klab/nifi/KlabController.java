@@ -24,7 +24,7 @@ import org.integratedmodelling.klab.api.scope.Scope;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-@Tags({"k.LAB"})
+@Tags({"k.LAB", "Semantic Web"})
 @CapabilityDescription("k.LAB Service API.")
 public interface KlabController extends ControllerService {
 
@@ -37,7 +37,11 @@ public interface KlabController extends ControllerService {
    */
   Scope getScope(Class<? extends Scope> scopeClass);
 
+  Scope getScope(String dtURL, Class<? extends Scope> scopeClass);
+
   void addEventListener(Consumer<EventData> listener);
 
   void removeEventListener(Consumer<EventData> listener);
+
+  void addScope(String dtURL, Scope scope);
 }

@@ -44,8 +44,17 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
                   .addValidator(StandardValidators.URL_VALIDATOR)
                   .build();
 
+  public static final PropertyDescriptor OBSERVATION_NAME =
+          new PropertyDescriptor.Builder()
+                  .name("observation-name")
+                  .displayName("Name of the observation context.")
+                  .description("The name of the observation context.")
+                  .required(false)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .build();
+
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-      List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY);
+      List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME);
 
   public static final Relationship REL_FAILURE =
       new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -117,7 +126,11 @@ public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
             .setTime(time)
             .build();
 
-    requestBuilder = builder.setObservationName("testing")
+    String name = context.getProperty(OBSERVATION_NAME) == null || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
+            ? "testing-" + System.currentTimeMillis()
+            : context.getProperty(OBSERVATION_NAME).getValue();
+
+    requestBuilder = builder.setObservationName(name)
             .setObservationSemantics("earth:Terrestrial earth:Region")
             .setGeometry(geometry);
 

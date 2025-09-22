@@ -12,12 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-org.integratedmodelling.klab.nifi.FileWriteProcessor
-org.integratedmodelling.klab.nifi.InputSTACAPIEndpoint
-org.integratedmodelling.klab.nifi.STACEndpointPingProcessor
 org.integratedmodelling.klab.nifi.MessageRelayProcessor
 org.integratedmodelling.klab.nifi.ObservationRelayProcessor
 org.integratedmodelling.klab.nifi.ObservationFlowFileInit
 org.integratedmodelling.klab.nifi.KlabInputFromJavaExampleProcessor
 org.integratedmodelling.klab.nifi.KlabUrnResolverProcessor
 org.integratedmodelling.klab.nifi.KlabObservation
+org.integratedmodelling.klab.nifi.KlabObservationWithDT

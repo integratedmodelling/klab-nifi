@@ -124,7 +124,7 @@ public class KlabControllerService extends AbstractControllerService implements 
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
 
     var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
-    final boolean useDefaultPath = certificateProperty.isBlank();
+    final boolean useDefaultPath = certificateProperty == null || certificateProperty.isBlank();
     if (useDefaultPath) {
       this.userScope = engine.authenticate();
     } else {
@@ -236,5 +236,17 @@ public class KlabControllerService extends AbstractControllerService implements 
     // Add other relevant attributes
 
     return new EventData(message.getPayload(message.getMessageType().payloadClass), attributes);
+  }
+
+  @Override
+  public Scope getScope(String dtURL, Class<? extends Scope> scopeClass) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'getScope'");
+  }
+
+  @Override
+  public void addScope(String dtURL, Scope scope) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'addScope'");
   }
 }

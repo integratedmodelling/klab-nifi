@@ -51,7 +51,7 @@ import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
         
 public class KlabObservation extends AbstractProcessor {
 
-    public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =   new PropertyDescriptor.Builder() 
+    public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE = new PropertyDescriptor.Builder()
             .name("klab-controller-service") 
             .displayName("k.LAB Controller Service") 
             .description("The k.LAB Controller Service to receive events from") 
@@ -114,7 +114,7 @@ public class KlabObservation extends AbstractProcessor {
             
             FlowFile flowfile = session.get(); // This is needed, since an input is required for this processor 
             if (flowfile == null) { 
-                getLogger().error("Incoming flowfile to the processor is null :("); 
+                getLogger().error("Incoming flowfile to the processor is null. A valid observation request was expected.");
                 return; 
             } 
             
@@ -125,6 +125,7 @@ public class KlabObservation extends AbstractProcessor {
             session.read(flowfile, in -> {
                 try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
                         req.set(gson.fromJson(reader, KlabObservationNifiRequest.class));
+                        getLogger().info("Hin");
 
                 } catch (Exception e) {
                     getLogger().error("Error reading JSON", e);
