@@ -21,6 +21,7 @@ import org.integratedmodelling.common.authentication.KlabCertificateImpl;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
+import org.integratedmodelling.klab.api.exceptions.KlabAuthorizationException;
 import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
@@ -56,6 +57,7 @@ public class KlabFederationControllerService extends AbstractControllerService
       List.of(CERTIFICATE_PROPERTY, DEFAULT_QUEUES);
 
   private Map<String, Scope> scopeMap;
+  private String certificatePath;
   private Engine engine;
   private UserScope userScope;
   private Scope configuredScope;
@@ -87,12 +89,33 @@ public class KlabFederationControllerService extends AbstractControllerService
   }
 
   /*
+  TODO update info
   Adds ContextScopes to the Scope Map if the relevant Scope
   corresponding to the DT URL if absent
    */
   @Override
-  public void addScope(String dtURL, Scope scope) {
-    this.scopeMap.putIfAbsent(dtURL, scope);
+  public void addScope(String dtURL, Scope scope) throws KlabAuthorizationException {
+    if (this.scopeMap.containsKey(dtURL)) {
+      return; // TODO check if we need to override the current one
+    }
+    try {
+      authenticateUserScope();
+    } catch (URISyntaxException | InitializationException e) {
+      throw new KlabAuthorizationException(e);
+    }
+    this.scopeMap.put(dtURL, scope);
+
+    this.engine.boot();
+    this.configuredScope =
+            this.userScope; // getScope would return the Userscope (and not the context scope) here
+
+    // Set up a message listener for the configured scope
+    if (this.configuredScope != null) {
+      setupMessageListener();
+    }
+
+    getLogger()
+            .info("Initialization done for the UserScope from the Certificate for the federation");
   }
 
   @Override
@@ -115,22 +138,23 @@ public class KlabFederationControllerService extends AbstractControllerService
    */
 
   @OnEnabled
-  public void onEnabled(final ConfigurationContext context)
-      throws InitializationException, URISyntaxException {
+  public void onEnabled(final ConfigurationContext context) {
 
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
     this.scopeMap = new ConcurrentHashMap<>();
+    this.certificatePath = context.getProperty(CERTIFICATE_PROPERTY).getValue();
+  }
 
-    var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
-    final boolean useDefaultPath = certificateProperty == null || certificateProperty.isBlank();
+  private void authenticateUserScope() throws URISyntaxException, InitializationException {
+    final boolean useDefaultPath = this.certificatePath == null;
     getLogger().info("Processing Certificate");
     if (useDefaultPath) {
       this.userScope = engine.authenticate();
     } else {
-      var certificateUri = new URI(certificateProperty);
+      var certificateUri = new URI(this.certificatePath);
       var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
       if (!certificateFile.exists()) {
-        throw new InitializationException("Cannot find a certificate at: " + certificateProperty);
+        throw new InitializationException("Cannot find a certificate at: " + this.certificatePath);
       }
       var certificate = KlabCertificateImpl.createFromFile(certificateFile);
       if (!certificate.isValid()) {
@@ -152,17 +176,6 @@ public class KlabFederationControllerService extends AbstractControllerService
               "User {} is not federated: messaging features disabled.",
               userScope.getUser().getUsername());
     }
-    this.engine.boot();
-    this.configuredScope =
-        this.userScope; // getScope would return the Userscope (and not the context scope) here
-
-    // Set up a message listener for the configured scope
-    if (this.configuredScope != null) {
-      setupMessageListener();
-    }
-
-    getLogger()
-        .info("Initialization done for the UserScope from the Certificate for the federation");
   }
 
   @OnDisabled
