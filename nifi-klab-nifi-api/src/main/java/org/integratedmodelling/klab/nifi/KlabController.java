@@ -19,6 +19,8 @@ package org.integratedmodelling.klab.nifi;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.controller.ControllerService;
+import org.integratedmodelling.klab.api.exceptions.KlabAuthorizationException;
+import org.integratedmodelling.klab.api.exceptions.KlabException;
 import org.integratedmodelling.klab.api.scope.Scope;
 
 import java.util.function.BiConsumer;
@@ -43,5 +45,5 @@ public interface KlabController extends ControllerService {
 
   void removeEventListener(Consumer<EventData> listener);
 
-  void addScope(String dtURL, Scope scope);
+  void addScope(String dtURL, Scope scope) throws KlabAuthorizationException;
 }
