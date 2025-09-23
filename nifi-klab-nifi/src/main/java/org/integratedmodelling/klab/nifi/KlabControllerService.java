@@ -81,7 +81,7 @@ public class KlabControllerService extends AbstractControllerService implements 
               "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
                   + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
           .required(false)
-              //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+          // .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
           .build();
 
   private static final List<PropertyDescriptor> properties =
@@ -128,7 +128,6 @@ public class KlabControllerService extends AbstractControllerService implements 
     if (useDefaultPath) {
       this.userScope = engine.authenticate();
     } else {
-
       var certificateUri = new URI(certificateProperty);
       var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
       if (!certificateFile.exists()) {

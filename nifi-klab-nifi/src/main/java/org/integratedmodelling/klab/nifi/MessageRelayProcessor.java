@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class MessageRelayProcessor extends AbstractProcessor {
 
-    // TODO this must be bound manually. See below for automated strategy. Not sure which is the best way.
+  // TODO this must be bound manually. See below for automated strategy. Not sure which is the best way.
   //  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
   //      new PropertyDescriptor.Builder()
   //          .name("klab-controller-service")
