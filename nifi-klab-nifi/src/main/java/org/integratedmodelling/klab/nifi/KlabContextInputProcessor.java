@@ -24,7 +24,7 @@ import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 @Tags({"k.LAB", "source", "example"})
 @CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
-public class KlabInputFromJavaExampleProcessor extends AbstractProcessor {
+public class KlabContextInputProcessor extends AbstractProcessor {
 
   public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
