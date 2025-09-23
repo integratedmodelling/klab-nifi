@@ -36,22 +36,22 @@ public class KlabContextInputProcessor extends AbstractProcessor {
           .build();
 
   public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
-          new PropertyDescriptor.Builder()
-                  .name("URL")
-                  .displayName("Digital Twin URL")
-                  .description("The URL for the digital twin to connect to")
-                  .required(false)
-                  .addValidator(StandardValidators.URL_VALIDATOR)
-                  .build();
+      new PropertyDescriptor.Builder()
+          .name("URL")
+          .displayName("Digital Twin URL")
+          .description("The URL for the digital twin to connect to")
+          .required(false)
+          .addValidator(StandardValidators.URL_VALIDATOR)
+          .build();
 
   public static final PropertyDescriptor OBSERVATION_NAME =
-          new PropertyDescriptor.Builder()
-                  .name("observation-name")
-                  .displayName("Name of the observation context.")
-                  .description("The name of the observation context.")
-                  .required(false)
-                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-                  .build();
+      new PropertyDescriptor.Builder()
+          .name("observation-name")
+          .displayName("Name of the observation context.")
+          .description("The name of the observation context.")
+          .required(false)
+          .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+          .build();
 
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
       List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME);
@@ -107,42 +107,47 @@ public class KlabContextInputProcessor extends AbstractProcessor {
 
     KlabObservationNifiRequest.Builder requestBuilder = null;
     try {
-    var builder = new KlabObservationNifiRequest.Builder();
+      var builder = new KlabObservationNifiRequest.Builder();
 
-    var space = new KlabObservationNifiRequest.Geometry.Space.Builder()
-            .setProj("EPSG:4326")
-            .setShape(
-                    "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
-            .setGrid("1.km")
-            .build();
+      var space =
+          new KlabObservationNifiRequest.Geometry.Space.Builder()
+              .setProj("EPSG:4326")
+              .setShape(
+                  "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
+              .setGrid("1.km")
+              .build();
 
-    var time = new KlabObservationNifiRequest.Geometry.Time.Builder()
-            .setTime(1325376000000L, 1356998400000L)
-            .setTscope(1).setTunit("year")
-            .build();
+      var time =
+          new KlabObservationNifiRequest.Geometry.Time.Builder()
+              .setTime(1325376000000L, 1356998400000L)
+              .setTscope(1)
+              .setTunit("year")
+              .build();
 
-    var geometry = new KlabObservationNifiRequest.Geometry.Builder()
-            .setSpace(space)
-            .setTime(time)
-            .build();
+      var geometry =
+          new KlabObservationNifiRequest.Geometry.Builder().setSpace(space).setTime(time).build();
 
-    String name = context.getProperty(OBSERVATION_NAME) == null || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
-            ? "testing-" + System.currentTimeMillis()
-            : context.getProperty(OBSERVATION_NAME).getValue();
+      String name =
+          context.getProperty(OBSERVATION_NAME) == null
+                  || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
+              ? "testing-" + System.currentTimeMillis()
+              : context.getProperty(OBSERVATION_NAME).getValue();
 
-    requestBuilder = builder.setObservationName(name)
-            .setObservationSemantics("earth:Terrestrial earth:Region")
-            .setGeometry(geometry);
+      requestBuilder =
+          builder
+              .setObservationName(name)
+              .setObservationSemantics("earth:Terrestrial earth:Region")
+              .setGeometry(geometry);
 
-    if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
-      requestBuilder.setDigitalTwinUrl(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
-    }
+      if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
+        requestBuilder.setDigitalTwinUrl(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
+      }
 
     } catch (KlabNifiException | MalformedURLException e) {
       throw new ProcessException(e);
     }
 
-      try {
+    try {
       FlowFile flowFile = session.create();
       KlabObservationNifiRequest request = requestBuilder.build();
       flowFile =
