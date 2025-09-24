@@ -21,7 +21,7 @@ import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
 /** An example processor that builds a valid flowfile. */
-@Tags({"k.LAB", "source", "example"})
+@Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class KlabContextInputProcessor extends AbstractProcessor {
