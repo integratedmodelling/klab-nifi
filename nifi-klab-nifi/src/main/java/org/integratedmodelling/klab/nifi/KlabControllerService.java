@@ -35,6 +35,7 @@ import org.integratedmodelling.common.authentication.KlabCertificateImpl;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
+import org.integratedmodelling.klab.api.exceptions.KlabAuthorizationException;
 import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
@@ -247,5 +248,17 @@ public class KlabControllerService extends AbstractControllerService implements 
   public void addScope(String dtURL, Scope scope) {
     // TODO Auto-generated method stub
     throw new UnsupportedOperationException("Unimplemented method 'addScope'");
+  }
+
+  @Override
+  public Scope createScope(String dtURL) throws KlabAuthorizationException {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'createScope'");
+  }
+
+  @Override
+  public boolean hasScope(String dtUrl) {
+    // TODO Auto-generated method stub
+    return true;
   }
 }

@@ -4,6 +4,8 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESO
 
 import com.google.gson.*;
 import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +34,7 @@ import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
+import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
@@ -104,22 +107,10 @@ public class KlabObservation extends AbstractProcessor {
         context
             .getProperty(KLAB_CONTROLLER_SERVICE)
             .asControllerService(KlabController.class); // Get the ContextScope from the controller
-    contextScope = (ContextScope) klabController.getScope(ContextScope.class);
-
-    if (contextScope == null) {
-      getLogger().error("No ContextScope available from the KlabController");
-    }
   }
 
   @Override
   public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-
-    if (!isRunning || contextScope == null) {
-      getLogger().error("Problems connecting to the DT");
-      context.yield();
-      return;
-    }
-
     FlowFile flowfile =
         session.get(); // This is needed, since an input is required for this processor
     if (flowfile == null) {
@@ -146,6 +137,27 @@ public class KlabObservation extends AbstractProcessor {
         });
 
     getLogger().info("Payload parsing done...");
+
+    String dtUrl = req.get().getDigitalTwinUrl();
+    if (!klabController.hasScope(dtUrl)) {
+    }
+
+    if (klabController.hasScope(dtUrl)) {
+      this.contextScope = (ContextScope) klabController.getScope(dtUrl, ContextScope.class);
+    }
+    var userScope = klabController.createScope(dtUrl);
+    try {
+      this.contextScope = ((UserScope)userScope).connect(new URL(dtUrl));
+    } catch (MalformedURLException e) {
+      throw new RuntimeException(e);
+    }
+
+    if (!this.isRunning || this.contextScope == null) {
+      getLogger().error("Problems connecting to the DT");
+      context.yield();
+      return;
+    }
+
 
     // The Observable from the Semantics URN with the Reasoner Client
     Observable observable =
