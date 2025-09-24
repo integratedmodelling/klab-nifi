@@ -85,7 +85,7 @@ public class KlabObservationNifiRequest {
         throw new KlabNifiException("Submitted Observation must have a Semantics");
       }
 
-      // No need for a DT URL
+      // A DT URL is not required in every case
 
       return new KlabObservationNifiRequest(this);
     }

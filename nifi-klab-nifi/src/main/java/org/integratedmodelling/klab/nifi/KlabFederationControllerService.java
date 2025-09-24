@@ -9,7 +9,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
 import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -28,7 +27,6 @@ import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.KlabService;
 import org.integratedmodelling.klab.api.services.runtime.Channel;
 import org.integratedmodelling.klab.api.services.runtime.Message;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 
 public class KlabFederationControllerService extends AbstractControllerService
     implements KlabController {
@@ -99,7 +97,7 @@ public class KlabFederationControllerService extends AbstractControllerService
       return; // TODO check if we need to override the current one
     }
     try {
-      authenticateUserScope();
+      this.userScope = authenticateUserScope();
     } catch (URISyntaxException | InitializationException e) {
       throw new KlabAuthorizationException(e);
     }
@@ -116,6 +114,31 @@ public class KlabFederationControllerService extends AbstractControllerService
 
     getLogger()
             .info("Initialization done for the UserScope from the Certificate for the federation");
+  }
+
+  @Override
+  public Scope createScope(String dtURL) throws KlabAuthorizationException {
+    if (scopeMap.containsKey(dtURL)) {
+      getLogger().info("Scope already exists.");
+      return scopeMap.get(dtURL);
+    }
+    try {
+      this.userScope = authenticateUserScope();
+    } catch (URISyntaxException | InitializationException e) {
+      throw new KlabAuthorizationException(e);
+    }
+    this.scopeMap.put(dtURL, userScope);
+
+    this.engine.boot();
+    this.configuredScope =
+            this.userScope; // getScope would return the Userscope (and not the context scope) here
+
+    return userScope;
+  }
+
+  @Override
+  public boolean hasScope(String dtUrl) {
+    return scopeMap.containsKey(dtUrl);
   }
 
   @Override
@@ -139,17 +162,16 @@ public class KlabFederationControllerService extends AbstractControllerService
 
   @OnEnabled
   public void onEnabled(final ConfigurationContext context) {
-
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
     this.scopeMap = new ConcurrentHashMap<>();
     this.certificatePath = context.getProperty(CERTIFICATE_PROPERTY).getValue();
   }
 
-  private void authenticateUserScope() throws URISyntaxException, InitializationException {
+  private UserScope authenticateUserScope() throws URISyntaxException, InitializationException {
     final boolean useDefaultPath = this.certificatePath == null;
     getLogger().info("Processing Certificate");
     if (useDefaultPath) {
-      this.userScope = engine.authenticate();
+      return this.engine.authenticate();
     } else {
       var certificateUri = new URI(this.certificatePath);
       var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
@@ -161,20 +183,21 @@ public class KlabFederationControllerService extends AbstractControllerService
         throw new InitializationException(
             "Certificate is not valid: " + certificate.getInvalidityCause());
       }
-      this.userScope = engine.authenticate(certificate);
-    }
+      var ret = this.engine.authenticate(certificate);
+      if (ret == null || ret.getUser().isAnonymous()) {
+        throw new KlabAuthorizationException(
+                "Unable to authenticate to k.LAB. Authentication is required for operation.");
+      }
 
-    if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
-      throw new InitializationException(
-          "Unable to authenticate to k.LAB. Authentication is required for operation.");
-    }
-    this.federation =
-        this.userScope == null ? null : Klab.INSTANCE.getFederationData(this.userScope.getUser());
-    if (federation == null) {
-      getLogger()
-          .warn(
-              "User {} is not federated: messaging features disabled.",
-              userScope.getUser().getUsername());
+      this.federation =
+              ret == null ? null : Klab.INSTANCE.getFederationData(ret.getUser());
+      if (this.federation == null) {
+        getLogger()
+                .warn(
+                        "User {} is not federated: messaging features disabled.",
+                        ret.getUser().getUsername());
+      }
+      return ret;
     }
   }
 
