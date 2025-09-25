@@ -127,17 +127,17 @@ public class KlabControllerService extends AbstractControllerService
     } catch (URISyntaxException | InitializationException e) {
       throw new KlabAuthorizationException(e);
     }
-    this.scopeMap.put(dtURL, userScope);
-
     this.engine.boot();
-    this.configuredScope =
-            this.userScope; // getScope would return the Userscope (and not the context scope) here
+    // getScope would return the Userscope (and not the context scope) here
+    this.configuredScope = this.userScope;
+
+    this.scopeMap.put(dtURL, userScope);
 
     return userScope;
   }
 
   @Override
-  public boolean hasScope(String dtUrl) {
+  public boolean containsDT(String dtUrl) {
     return scopeMap.containsKey(dtUrl);
   }
 

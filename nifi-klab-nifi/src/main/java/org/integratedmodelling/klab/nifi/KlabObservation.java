@@ -139,17 +139,17 @@ public class KlabObservation extends AbstractProcessor {
     getLogger().info("Payload parsing done...");
 
     String dtUrl = req.get().getDigitalTwinUrl();
-    if (!klabController.hasScope(dtUrl)) {
-    }
+    getLogger().info("Connecting to DT " + dtUrl);
 
-    if (klabController.hasScope(dtUrl)) {
-      this.contextScope = (ContextScope) klabController.getScope(dtUrl, ContextScope.class);
-    }
-    var userScope = klabController.createScope(dtUrl);
-    try {
-      this.contextScope = ((UserScope)userScope).connect(new URL(dtUrl));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
+    if (klabController.containsDT(dtUrl)) {
+      this.contextScope = (ContextScope) klabController.getScope(ContextScope.class);
+    } else {
+      var userScope = klabController.createScope(dtUrl);
+      try {
+        this.contextScope = ((UserScope)userScope).connect(new URL(dtUrl));
+      } catch (MalformedURLException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     if (!this.isRunning || this.contextScope == null) {
@@ -157,7 +157,6 @@ public class KlabObservation extends AbstractProcessor {
       context.yield();
       return;
     }
-
 
     // The Observable from the Semantics URN with the Reasoner Client
     Observable observable =

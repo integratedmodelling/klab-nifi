@@ -46,5 +46,5 @@ public interface KlabController extends ControllerService {
 
   Scope createScope(String dtURL) throws KlabAuthorizationException;
 
-  boolean hasScope(String dtUrl);
+  boolean containsDT(String dtUrl);
 }
