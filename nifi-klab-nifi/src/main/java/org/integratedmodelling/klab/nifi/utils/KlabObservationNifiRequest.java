@@ -1,11 +1,11 @@
 package org.integratedmodelling.klab.nifi.utils;
 
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Date;
+import org.integratedmodelling.common.utils.Utils;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
 
@@ -19,12 +19,14 @@ public class KlabObservationNifiRequest {
   private final String name;
   private final String semantics;
   private final String digitalTwin;
+  private final long observationId;
 
   private KlabObservationNifiRequest(Builder builder) {
     this.geometry = builder.geometry;
     this.name = builder.name;
     this.semantics = builder.semantics;
     this.digitalTwin = builder.digitalTwin;
+    this.observationId = builder.observationId;
   }
 
   /** Serialize this object to JSON */
@@ -46,6 +48,10 @@ public class KlabObservationNifiRequest {
     return semantics;
   }
 
+  public long getObservationId() {
+    return observationId;
+  }
+
   public String getDigitalTwin() {
     return digitalTwin;
   }
@@ -54,6 +60,7 @@ public class KlabObservationNifiRequest {
     private Geometry geometry;
     private String name;
     private String semantics;
+    private long observationId = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
 
     public Builder setGeometry(Geometry geometry) {
@@ -71,8 +78,13 @@ public class KlabObservationNifiRequest {
       return this;
     }
 
-    public Builder setDigitalTwin(String digitalTwin) throws MalformedURLException {
-      this.digitalTwin = String.valueOf(new URL(digitalTwin));
+    public Builder setObservationId(long id) {
+      this.observationId = id;
+      return this;
+    }
+
+    public Builder setDigitalTwin(String digitalTwin) {
+      this.digitalTwin = String.valueOf(Utils.URLs.newURL(digitalTwin));
       return this;
     }
 

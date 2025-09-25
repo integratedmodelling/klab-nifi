@@ -1,11 +1,8 @@
 package org.integratedmodelling.klab.nifi;
 
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
 
 import com.google.gson.*;
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -27,6 +24,7 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
@@ -145,11 +143,7 @@ public class KlabObservation extends AbstractProcessor {
       this.contextScope = (ContextScope) klabController.getScope(ContextScope.class);
     } else {
       var userScope = klabController.createScope(dtUrl);
-      try {
-        this.contextScope = ((UserScope)userScope).connect(new URL(dtUrl));
-      } catch (MalformedURLException e) {
-        throw new RuntimeException(e);
-      }
+      this.contextScope = ((UserScope)userScope).connect(Utils.URLs.newURL(dtUrl));
     }
 
     if (!this.isRunning || this.contextScope == null) {
@@ -187,7 +181,8 @@ public class KlabObservation extends AbstractProcessor {
     obs.setGeometry(geometry.build());
     obs.setName(req.get().getObservationName());
     obs.setUrn(req.get().getObservationSemantics());
-    obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
+    obs.setId(req.get().getObservationId()); // Unresolved Observation ID is -1
+    getLogger().warn("OBSERVATION ID = " + obs.getId());
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
     // Convert the object to a pretty-printed JSON string
@@ -202,6 +197,7 @@ public class KlabObservation extends AbstractProcessor {
       FlowFile successFlowFile = session.create();
       Map<String, String> attributes = new HashMap<>();
       attributes.put("observation.id", resolvedObservation.getId() + "");
+      // TODO make sure that the resolved observation is valid. E.g. id is not -1
       attributes.put("observation.type", resolvedObservation.getType().toString());
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
       getLogger().info("Success Flowfile being sent to Success Relation..");
