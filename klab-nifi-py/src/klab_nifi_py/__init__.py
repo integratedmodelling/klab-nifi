@@ -48,7 +48,7 @@ class KlabObservationNifiRequest(BaseModel):
 
         if dtURL :
             logger.debug("Setting the Digital Twin URL")
-            self.digitalTwinUrl = dtURL
+            self.digitalTwin = dtURL
         else:
             logger.warning("Digital Twin URL not set, the KlabObservation " \
             "Nifi Processor along with KlabController Service should be used to resolve k.LAB Observations")

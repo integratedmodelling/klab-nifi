@@ -138,7 +138,7 @@ public class KlabObservation extends AbstractProcessor {
 
     getLogger().info("Payload parsing done...");
 
-    String dtUrl = req.get().getDigitalTwinUrl();
+    String dtUrl = req.get().getDigitalTwin();
     getLogger().info("Connecting to DT " + dtUrl);
 
     if (klabController.containsDT(dtUrl)) {

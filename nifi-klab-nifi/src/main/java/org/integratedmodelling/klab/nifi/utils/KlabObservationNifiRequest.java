@@ -18,13 +18,13 @@ public class KlabObservationNifiRequest {
   private final Geometry geometry;
   private final String name;
   private final String semantics;
-  private final String digitalTwinUrl;
+  private final String digitalTwin;
 
   private KlabObservationNifiRequest(Builder builder) {
     this.geometry = builder.geometry;
     this.name = builder.name;
     this.semantics = builder.semantics;
-    this.digitalTwinUrl = builder.digitalTwinUrl;
+    this.digitalTwin = builder.digitalTwin;
   }
 
   /** Serialize this object to JSON */
@@ -46,15 +46,15 @@ public class KlabObservationNifiRequest {
     return semantics;
   }
 
-  public String getDigitalTwinUrl() {
-    return digitalTwinUrl;
+  public String getDigitalTwin() {
+    return digitalTwin;
   }
 
   public static class Builder {
     private Geometry geometry;
     private String name;
     private String semantics;
-    private String digitalTwinUrl;
+    private String digitalTwin;
 
     public Builder setGeometry(Geometry geometry) {
       this.geometry = geometry;
@@ -71,8 +71,8 @@ public class KlabObservationNifiRequest {
       return this;
     }
 
-    public Builder setDigitalTwinUrl(String digitalTwinUrl) throws MalformedURLException {
-      this.digitalTwinUrl = String.valueOf(new URL(digitalTwinUrl));
+    public Builder setDigitalTwin(String digitalTwin) throws MalformedURLException {
+      this.digitalTwin = String.valueOf(new URL(digitalTwin));
       return this;
     }
 

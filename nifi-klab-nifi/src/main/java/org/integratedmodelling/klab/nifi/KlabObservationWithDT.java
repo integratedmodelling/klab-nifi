@@ -146,7 +146,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     getLogger().info("Payload parsing done...");
 
-    String dtURL = req.get().getDigitalTwinUrl();
+    String dtURL = req.get().getDigitalTwin();
     if (dtURL.isEmpty()) {
       getLogger().error("The Flowfile doesn't have the DT URL");
       session.transfer(flowfile, REL_FAILURE);

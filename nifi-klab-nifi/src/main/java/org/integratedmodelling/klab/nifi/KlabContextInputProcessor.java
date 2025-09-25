@@ -140,7 +140,7 @@ public class KlabContextInputProcessor extends AbstractProcessor {
               .setGeometry(geometry);
 
       if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
-        requestBuilder.setDigitalTwinUrl(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
+        requestBuilder.setDigitalTwin(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
       }
 
     } catch (KlabNifiException | MalformedURLException e) {
