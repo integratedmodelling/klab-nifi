@@ -20,8 +20,9 @@ klabNifiObs = KlabObservationNifiRequest(
     space = space, 
     time = time,
     observationName= "AM1729",
-    observationSemantics= "earth:Terrestrial earth:Region"
+    observationSemantics= "earth:Terrestrial earth:Region",
     #dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.40ipl26qekk"
+    #id = -1,
 )
 
 print (klabNifiObs.to_dict())
