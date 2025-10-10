@@ -128,7 +128,7 @@ public class KlabContextInputProcessor extends AbstractProcessor {
           new KlabObservationNifiRequest.Geometry.Builder().setSpace(space).setTime(time).build();
 
       String name =
-          context.getProperty(OBSERVATION_NAME) == null
+          context.getProperty(OBSERVATION_NAME).getValue() == null
                   || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
               ? "testing-" + System.currentTimeMillis()
               : context.getProperty(OBSERVATION_NAME).getValue();
