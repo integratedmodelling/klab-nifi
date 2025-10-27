@@ -14,3 +14,4 @@
 # limitations under the License.
 org.integratedmodelling.klab.nifi.KlabControllerService
 org.integratedmodelling.klab.nifi.KlabFederationControllerService
+org.integratedmodelling.klab.nifi.KlabControllerWithDTService
