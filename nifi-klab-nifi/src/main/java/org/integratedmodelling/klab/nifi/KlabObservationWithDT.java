@@ -59,8 +59,8 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
   public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
       new PropertyDescriptor.Builder()
-          .name("klab-federation-controller-service")
-          .displayName("k.LAB Federation Controller Service")
+          .name("klab-controller-service")
+          .displayName("k.LAB Controller Service")
           .description(
               "The k.LAB Federation Controller Service for the User Scope at the Federation Level")
           .required(true)
