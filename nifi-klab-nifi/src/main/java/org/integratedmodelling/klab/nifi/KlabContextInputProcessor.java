@@ -3,8 +3,6 @@ package org.integratedmodelling.klab.nifi;
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_URN;
 
 import com.google.gson.Gson;
-
-import java.net.MalformedURLException;
 import java.util.List;
 import java.util.Set;
 import org.apache.nifi.annotation.behavior.InputRequirement;
@@ -53,8 +51,89 @@ public class KlabContextInputProcessor extends AbstractProcessor {
           .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
           .build();
 
+  public static final PropertyDescriptor OBSERVATION_SEMANTICS =
+          new PropertyDescriptor.Builder()
+                  .name("observation-semantics")
+                  .displayName("Semantics of the observation.")
+                  .description("These are the observed semantics.")
+                  .required(true)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_ID =
+          new PropertyDescriptor.Builder()
+                  .name("observation-id")
+                  .displayName("ID of the observation.")
+                  .description("These are the observed semantics. -1 for context observations.")
+                  .required(false)
+                  .addValidator(StandardValidators.NUMBER_VALIDATOR)
+                  .defaultValue("-1")
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_SPACE =
+          new PropertyDescriptor.Builder()
+                  .name("observation-space")
+                  .displayName("Spatial dimension of the observation.")
+                  .description("WKT geometry of the observation.")
+                  .required(false)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_PROJECTION =
+          new PropertyDescriptor.Builder()
+                  .name("observation-projection")
+                  .displayName("Spatial projection of the observation.")
+                  .description("Projection of the observation.")
+                  .required(false)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .defaultValue("EPSG:4326")
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_GRID_SIZE =
+          new PropertyDescriptor.Builder()
+                  .name("observation-grid")
+                  .displayName("Grid size of the observation.")
+                  .description("Grid of the observation.")
+                  .required(false)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .defaultValue("1.km")
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_TIME_START =
+          new PropertyDescriptor.Builder()
+                  .name("observation-tstart")
+                  .displayName("Time start.")
+                  .description("Starting time of observation as millis.")
+                  .required(false)
+                  .addValidator(StandardValidators.NUMBER_VALIDATOR)
+                  .defaultValue("1.km")
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_TIME_END =
+          new PropertyDescriptor.Builder()
+                  .name("observation-tend")
+                  .displayName("Time end.")
+                  .description("End time of the observation as millis.")
+                  .required(false)
+                  .addValidator(StandardValidators.NUMBER_VALIDATOR)
+                  .defaultValue("1.km")
+                  .build();
+
+  public static final PropertyDescriptor OBSERVATION_TIME_UNIT =
+          new PropertyDescriptor.Builder()
+                  .name("observation-tunit")
+                  .displayName("Temporal unit.")
+                  .description("Temporal unit of the observation.")
+                  .required(false)
+                  .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .defaultValue("year")
+                  .build();
+
   public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-      List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME);
+      List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME,
+              OBSERVATION_SEMANTICS, OBSERVATION_ID,
+              OBSERVATION_SPACE, OBSERVATION_PROJECTION, OBSERVATION_GRID_SIZE,
+              OBSERVATION_TIME_START, OBSERVATION_TIME_END, OBSERVATION_TIME_UNIT);
 
   public static final Relationship REL_FAILURE =
       new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -109,19 +188,31 @@ public class KlabContextInputProcessor extends AbstractProcessor {
     try {
       var builder = new KlabObservationNifiRequest.Builder();
 
+      String projection = context.getProperty(OBSERVATION_PROJECTION).getValue();
+      // POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))
+      String geometryWkt = context.getProperty(OBSERVATION_SPACE).getValue() == null // TODO if empty, ignore
+              || context.getProperty(OBSERVATION_SPACE).getValue().isBlank()
+              ? ""
+              : context.getProperty(OBSERVATION_SPACE).getValue();
+      String grid = context.getProperty(OBSERVATION_GRID_SIZE).getValue();
+
       var space =
           new KlabObservationNifiRequest.Geometry.Space.Builder()
-              .setProj("EPSG:4326")
-              .setShape(
-                  "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))")
-              .setGrid("1.km")
+              .setProj(projection)
+              .setShape(geometryWkt)
+              .setGrid(grid)
               .build();
+
+      // 1325376000000L -> 1356998400000L
+      long tStart = Long.parseLong(context.getProperty(OBSERVATION_TIME_START).getValue());
+      long tEnd = Long.parseLong(context.getProperty(OBSERVATION_TIME_END).getValue());
+      String tUnit = context.getProperty(OBSERVATION_TIME_UNIT).getValue();
 
       var time =
           new KlabObservationNifiRequest.Geometry.Time.Builder()
-              .setTime(1325376000000L, 1356998400000L)
+              .setTime(tStart, tEnd)
               .setTscope(1)
-              .setTunit("year")
+              .setTunit(tUnit)
               .build();
 
       var geometry =
@@ -133,10 +224,11 @@ public class KlabContextInputProcessor extends AbstractProcessor {
               ? "testing-" + System.currentTimeMillis()
               : context.getProperty(OBSERVATION_NAME).getValue();
 
+      String semantics = context.getProperty(OBSERVATION_SEMANTICS).getValue();
       requestBuilder =
           builder
               .setObservationName(name)
-              .setObservationSemantics("earth:Terrestrial earth:Region")
+              .setObservationSemantics(semantics)
               .setGeometry(geometry);
 
       if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
@@ -159,7 +251,6 @@ public class KlabContextInputProcessor extends AbstractProcessor {
               });
 
       // Add attributes from event
-      session.putAttribute(flowFile, KLAB_URN, "earth:Terrestrial earth:Region");
       session.transfer(flowFile, REL_SUCCESS);
       session.commitAsync();
 

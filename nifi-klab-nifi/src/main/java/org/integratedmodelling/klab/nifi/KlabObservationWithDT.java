@@ -199,9 +199,6 @@ public class KlabObservationWithDT extends AbstractProcessor {
     obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
-    // Convert the object to a pretty-printed JSON string
-    System.out.println(prettyGson.toJson(obs));
-
     AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
     observationRef.set(obs);
     Observation observation = observationRef.get();
@@ -213,7 +210,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       attributes.put("observation.id", resolvedObservation.getId() + "");
       attributes.put("observation.type", resolvedObservation.getType().toString());
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
-      getLogger().info("Success Flowfile being sent to Success Relation..");
+      getLogger().info("Success Flowfile being sent to Success Relation.");
       session.remove(flowfile);
       session.transfer(successFlowFile, REL_SUCCESS);
     } catch (Exception e) {
