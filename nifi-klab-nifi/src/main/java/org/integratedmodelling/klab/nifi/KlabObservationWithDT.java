@@ -27,6 +27,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
@@ -194,6 +195,13 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
     obs.setGeometry(geometry.build());
+
+//    ObservationImpl obs = DigitalTwin.createObservation(
+//            contextScope,
+//            observable,
+//            geometry.build(),
+//            req.get().getObservationName());
+
     obs.setName(req.get().getObservationName());
     obs.setUrn(req.get().getObservationSemantics());
     obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
@@ -212,6 +220,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
       Map<String, String> attributes = new HashMap<>();
       attributes.put("observation.id", resolvedObservation.getId() + "");
       attributes.put("observation.type", resolvedObservation.getType().toString());
+      System.out.println(resolvedObservation.getId() + " "
+              + resolvedObservation.getName() + " "
+              + resolvedObservation.getObservable() + " "
+              + resolvedObservation.getResolvedCoverage() + " "
+              + resolvedObservation.getType().toString());
+
+      System.out.println(prettyGson.toJson(resolvedObservation));
+
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
       getLogger().info("Success Flowfile being sent to Success Relation..");
       session.remove(flowfile);
