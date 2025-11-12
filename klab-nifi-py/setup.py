@@ -18,5 +18,6 @@ setup(
     ],
     python_requires=">=3.10",
     install_requires=[
+        "shapely>=2.0.7"
     ],
 )
