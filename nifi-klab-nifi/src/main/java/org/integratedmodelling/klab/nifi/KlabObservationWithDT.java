@@ -1,5 +1,6 @@
 package org.integratedmodelling.klab.nifi;
 
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXT_OBSERVSTION_SEMANTICS;
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
 
 import com.google.gson.*;
@@ -227,6 +228,20 @@ public class KlabObservationWithDT extends AbstractProcessor {
               + resolvedObservation.getType().toString());
 
       System.out.println(prettyGson.toJson(resolvedObservation));
+
+      /*
+        If asContext parameter has been set, and the observation submitted has
+        a Semantics of earth:Terrestrial earth:Region and should
+         have a time and space (Validated in the client)
+        then the context observation would be marked as context, and
+        the future observations would be made in that context
+      */
+      if (req.get().getAsContext()){
+        getLogger().info("Setting the Context Observation with id: "
+                + resolvedObservation.getId()
+                + " as the Context for future Observation");
+        contextScope.within(resolvedObservation);
+      }
 
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
       getLogger().info("Success Flowfile being sent to Success Relation..");

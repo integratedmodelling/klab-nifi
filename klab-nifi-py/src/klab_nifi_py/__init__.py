@@ -5,6 +5,7 @@ import logging
 
 
 NIFI_HEALTHCHECK_PATH = "/healthcheck"
+CONTEXT_OBSERVATION_SEMANTICS = "earth:Terrestrial earth:Region"
 
 class KlabObservationNifiRequest(BaseModel):
     '''
@@ -20,6 +21,7 @@ class KlabObservationNifiRequest(BaseModel):
     def __init__(self, 
                  observationName:str=None,
                  observationSemantics:str=None,
+                 asContext:bool=False,
                  space:Space=None,
                  time:Time=None,
                  dtURL:str=None,
@@ -39,9 +41,15 @@ class KlabObservationNifiRequest(BaseModel):
         logger.info("Setting Name and Semantics to the Observation")
         self.name = observationName
 
-        ## To check how can we validate the semantics here without the Python Client
+        ##TODO: check how can we validate the semantics here without the Python Client
         ## Keeping it as it is for now
         self.semantics = observationSemantics 
+
+        self.asContext = asContext
+
+        if self.asContext and (not space or not time or observationSemantics != CONTEXT_OBSERVATION_SEMANTICS) :
+            raise KlabNifiException("Context Observations must have both Space and Time defined, "
+            "and Semantics must be set to " + CONTEXT_OBSERVATION_SEMANTICS)
 
         if space and time :
             logger.debug("Setting Geometry")

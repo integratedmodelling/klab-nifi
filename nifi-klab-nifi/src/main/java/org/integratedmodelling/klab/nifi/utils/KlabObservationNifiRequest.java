@@ -19,6 +19,7 @@ public class KlabObservationNifiRequest {
   private final String name;
   private final String semantics;
   private final String digitalTwin;
+  private final boolean asContext;
   private final long observationId;
 
   private KlabObservationNifiRequest(Builder builder) {
@@ -27,6 +28,7 @@ public class KlabObservationNifiRequest {
     this.semantics = builder.semantics;
     this.digitalTwin = builder.digitalTwin;
     this.observationId = builder.observationId;
+    this.asContext = builder.asContext;
   }
 
   /** Serialize this object to JSON */
@@ -52,9 +54,9 @@ public class KlabObservationNifiRequest {
     return observationId;
   }
 
-  public String getDigitalTwin() {
-    return digitalTwin;
-  }
+  public String getDigitalTwin() { return digitalTwin; }
+
+  public boolean getAsContext() { return asContext; }
 
   public static class Builder {
     private Geometry geometry;
@@ -62,6 +64,12 @@ public class KlabObservationNifiRequest {
     private String semantics;
     private long observationId = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
+    public boolean asContext;
+
+    public Builder setAsContext(boolean asContext){
+      this.asContext = asContext;
+      return this;
+    }
 
     public Builder setGeometry(Geometry geometry) {
       this.geometry = geometry;
