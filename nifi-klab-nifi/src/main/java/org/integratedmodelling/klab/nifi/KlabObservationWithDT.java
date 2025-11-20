@@ -179,23 +179,29 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     System.out.println(prettyGson.toJson(observable));
     System.out.println("Observable Generated..");
-
-    var geometry =
-        GeometryImpl.builder()
-            .space()
-            .shape(req.get().getGeometry().getSpace().getShape())
-            .resolution(req.get().getGeometry().getSpace().getSgrid())
-            .projection(req.get().getGeometry().getSpace().getProj())
-            .build()
-            .time()
-            .between(
-                req.get().getGeometry().getTime().getTstart(),
-                req.get().getGeometry().getTime().getTend())
-            .resolution(Time.Resolution.Type.YEAR, req.get().getGeometry().getTime().getTscope())
-            .build();
-
     ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
-    obs.setGeometry(geometry.build());
+
+    if (req.get().getAsContext()) {
+      /*
+        Setting Name and Geometry (Time & Space) when it's a context observation,
+        else just pass the semantics
+       */
+      var geometry =
+              GeometryImpl.builder()
+                      .space()
+                      .shape(req.get().getGeometry().getSpace().getShape())
+                      .resolution(req.get().getGeometry().getSpace().getSgrid())
+                      .projection(req.get().getGeometry().getSpace().getProj())
+                      .build()
+                      .time()
+                      .between(
+                              req.get().getGeometry().getTime().getTstart(),
+                              req.get().getGeometry().getTime().getTend())
+                      .resolution(Time.Resolution.Type.YEAR, req.get().getGeometry().getTime().getTscope())
+                      .build();
+      obs.setGeometry(geometry.build());
+      obs.setName(req.get().getObservationName());
+    }
 
 //    ObservationImpl obs = DigitalTwin.createObservation(
 //            contextScope,
@@ -203,7 +209,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 //            geometry.build(),
 //            req.get().getObservationName());
 
-    obs.setName(req.get().getObservationName());
+
     obs.setUrn(req.get().getObservationSemantics());
     obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
     getLogger().info("Observation Payload Generation done, submitting the Observation");

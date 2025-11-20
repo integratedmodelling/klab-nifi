@@ -19,9 +19,9 @@ time = Time(
 klabNifiObs = KlabObservationNifiRequest(
     space = space, 
     time = time,
-    observationName="dt_test",
-    observationSemantics= "earth:Terrestrial earth:Region",
-    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.kh4au4ha8c"
+    observationSemantics= "geography:Elevation",
+   # asContext=True,
+    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.kiog1d9toc"
     #id = -1,
 )
 
