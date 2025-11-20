@@ -32,19 +32,21 @@ class KlabObservationNifiRequest(BaseModel):
         logger.info("Building the Nifi Observation")
         logger.setLevel(loglevel)
 
-        if not observationName :
-            raise KlabNifiException("Observation Name cannot be non null")
+        if not observationName and asContext:
+            raise KlabNifiException("Observation Name cannot be non null for Context Observations")
+        else:
+            logger.info("Setting Name to the Observation")
+            self.name = observationName
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
 
         logger.info("Setting Name and Semantics to the Observation")
-        self.name = observationName
+
 
         ##TODO: check how can we validate the semantics here without the Python Client
         ## Keeping it as it is for now
         self.semantics = observationSemantics 
-
         self.asContext = asContext
 
         if self.asContext and (not space or not time or observationSemantics != CONTEXT_OBSERVATION_SEMANTICS) :
