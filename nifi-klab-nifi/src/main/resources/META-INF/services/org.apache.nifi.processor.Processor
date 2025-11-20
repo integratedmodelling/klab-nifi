@@ -14,3 +14,4 @@
 # limitations under the License.
 org.integratedmodelling.klab.nifi.MessageRelayProcessor
 org.integratedmodelling.klab.nifi.KlabObservationWithDT
+org.integratedmodelling.klab.nifi.KlabContextInputProcessor
