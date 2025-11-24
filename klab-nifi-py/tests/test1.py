@@ -17,15 +17,19 @@ time = Time(
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    space = space, 
-    time = time,
+    #space = space, 
+    #time = time,
     observationSemantics= "geography:Elevation",
-   # asContext=True,
-    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.kiog1d9toc"
+    #asContext=True,
+    #observationName="dillli",
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.knbrfrcjjl"
     #id = -1,
 )
 
 print (klabNifiObs.to_dict())
 
+print (klabNifiObs.to_json())
+
 nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
 nifiklabClient.submitObservation(klabNifiObs)
+

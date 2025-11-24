@@ -1,4 +1,5 @@
 
+import json
 
 KLAB_GEO_PROJ = "EPSG:4326"
 KLAB_UNRESOLVED_OBS_ID = -1
@@ -18,3 +19,6 @@ class BaseModel:
             else:
                 result[key] = value
         return result
+    
+    def to_json(self):
+        return json.dumps(self.to_dict())
