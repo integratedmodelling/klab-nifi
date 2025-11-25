@@ -21,9 +21,9 @@ klabNifiObs = KlabObservationNifiRequest(
     #time = time,
     observationSemantics= "geography:Elevation",
     #asContext=True,
-    #observationName="dillli",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.knbrfrcjjl"
-    #id = -1,
+    #observationName="el_capital",
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.2p4wt6tysj",
+    id = -1,
 )
 
 print (klabNifiObs.to_dict())

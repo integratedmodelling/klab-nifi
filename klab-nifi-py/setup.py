@@ -13,7 +13,7 @@ setup(
     package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: AGPLv3", 
+        "License :: OSI Approved :: GNU Affero General Public License v3", 
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.10",
