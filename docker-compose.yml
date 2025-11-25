@@ -11,9 +11,8 @@ services:
       - ./custom-nars:/opt/nifi/custom-nars
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
-      - ./nifi-klab-nifi/src/main/python:/opt/nifi/py_scripts
+      - ./klab-nifi-py/src/klab_nifi_py:/opt/nifi/py_scripts
       - C:\Users\arnab.moitra\.klab:/home/nifi/.klab
-      - ./klab-nifi-py/src/klab_nifi_py:/tmp/custom/klab_nifi_py
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
       - NIFI_INPUT_DIR=./nifi_input
@@ -24,7 +23,7 @@ services:
       bash -c "
         echo 'Copying custom NARs to lib...' &&
         cp /opt/nifi/custom-nars/*.nar /opt/nifi/nifi-current/lib/ &&
-        cp /opt/nifi/py_scripts/* /opt/nifi/nifi-current/python_extensions/ &&
+        cp -r /opt/nifi/py_scripts/* /opt/nifi/nifi-current/python_extensions/ &&
         echo 'Starting NiFi...' &&
         /opt/nifi/scripts/start.sh
       "
