@@ -182,56 +182,69 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
 
         KlabObservationNifiRequest.Builder requestBuilder = new KlabObservationNifiRequest.Builder();
+        KlabObservationNifiRequest.Geometry.Time time = null;
+        KlabObservationNifiRequest.Geometry geometry = null;
+        String name = null;
+
         try {
             var builder = new KlabObservationNifiRequest.Builder();
 
-            String projection = context.getProperty(OBSERVATION_PROJECTION).getValue();
-            String geometryWkt = context.getProperty(OBSERVATION_SPACE).getValue() == null // TODO if empty, ignore
-                    || context.getProperty(OBSERVATION_SPACE).getValue().isBlank()
-                    ? ""
-                    : context.getProperty(OBSERVATION_SPACE).getValue();
-            String grid = context.getProperty(OBSERVATION_GRID_SIZE).getValue();
+            boolean asContext = Boolean.parseBoolean(context.getProperty(AS_CONTEXT).getValue());
 
-            var space =
-                    new KlabObservationNifiRequest.Geometry.Space.Builder()
-                            .setProj(projection)
-                            .setShape(geometryWkt)
-                            .setGrid(grid)
-                            .build();
+            if (asContext) {
+                String projection = context.getProperty(OBSERVATION_PROJECTION).getValue();
+                String geometryWkt = context.getProperty(OBSERVATION_SPACE).getValue() == null // TODO if empty, ignore
+                        || context.getProperty(OBSERVATION_SPACE).getValue().isBlank()
+                        ? ""
+                        : context.getProperty(OBSERVATION_SPACE).getValue();
+                String grid = context.getProperty(OBSERVATION_GRID_SIZE).getValue();
 
-            // 1325376000000L -> 1356998400000L
-            long tStart = Long.parseLong(context.getProperty(OBSERVATION_TIME_START).getValue());
-            long tEnd = Long.parseLong(context.getProperty(OBSERVATION_TIME_END).getValue());
-            String tUnit = context.getProperty(OBSERVATION_TIME_UNIT).getValue();
+                var space =
+                        new KlabObservationNifiRequest.Geometry.Space.Builder()
+                                .setProj(projection)
+                                .setShape(geometryWkt)
+                                .setGrid(grid)
+                                .build();
 
-            var time =
-                    new KlabObservationNifiRequest.Geometry.Time.Builder()
-                            .setTime(tStart, tEnd)
-                            .setTscope(1)
-                            .setTunit(tUnit)
-                            .build();
+                // 1325376000000L -> 1356998400000L
+                long tStart = Long.parseLong(context.getProperty(OBSERVATION_TIME_START).getValue());
+                long tEnd = Long.parseLong(context.getProperty(OBSERVATION_TIME_END).getValue());
+                String tUnit = context.getProperty(OBSERVATION_TIME_UNIT).getValue();
 
-            var geometry =
-                    new KlabObservationNifiRequest.Geometry.Builder().setSpace(space).setTime(time).build();
+                time =
+                        new KlabObservationNifiRequest.Geometry.Time.Builder()
+                                .setTime(tStart, tEnd)
+                                .setTscope(1)
+                                .setTunit(tUnit)
+                                .build();
 
-            String name =
-                    context.getProperty(OBSERVATION_NAME).getValue() == null
-                            || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
-                            ? "testing-" + System.currentTimeMillis()
-                            : context.getProperty(OBSERVATION_NAME).getValue();
+                geometry =
+                        new KlabObservationNifiRequest.Geometry.Builder().setSpace(space).setTime(time).build();
+
+                name =
+                        context.getProperty(OBSERVATION_NAME).getValue() == null
+                                || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
+                                ? "testing-" + System.currentTimeMillis()
+                                : context.getProperty(OBSERVATION_NAME).getValue();
+
+                // If setting asContext true, i.e. it needs a name and the geometry i.e. time and all
+                requestBuilder = requestBuilder
+                        .setAsContext(asContext)
+                        .setObservationName(name)
+                        .setGeometry(geometry);
+
+            }
 
             String semantics = context.getProperty(OBSERVATION_SEMANTICS).getValue();
             String dtURL = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
-            boolean asContext = Boolean.parseBoolean(context.getProperty(AS_CONTEXT).getValue());
 
             FlowFile flowFile = session.create();
 
+            // dtURL and Semantics are set up for all the requests
+            // other wise the workflow will fail
             KlabObservationNifiRequest request = requestBuilder
-                    .setAsContext(asContext)
                     .setDigitalTwin(dtURL)
                     .setObservationSemantics(semantics)
-                    .setObservationName(name)
-                    .setGeometry(geometry)
                     .build();
 
             flowFile =
