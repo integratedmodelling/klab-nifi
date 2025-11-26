@@ -29,8 +29,8 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
             new PropertyDescriptor.Builder()
                     .name("URL")
                     .displayName("Digital Twin URL")
-                    .description("The URL for the digital twin to connect to")
-                    .required(false)
+                    .description("The URL for the digital twin to connect to, always required")
+                    .required(true)
                     .addValidator(StandardValidators.URL_VALIDATOR)
                     .build();
 
@@ -40,6 +40,7 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
                     .displayName("Name of the observation context.")
                     .description("The name of the context observation, NEEDED if observing a context, not for quality observations and all.")
                     .required(false)
+                    .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
                     .build();
 
     public static final PropertyDescriptor OBSERVATION_SEMANTICS =
