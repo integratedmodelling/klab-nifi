@@ -17,20 +17,13 @@ import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
-/** An example processor that builds a valid flowfile. */
+/** An processor that builds a valid flowfile to be passed to the
+ *  Observation Submitter Processor, by the means of setting different
+ *  things in the Parameters */
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
-public class KlabContextInputProcessor extends AbstractProcessor {
-
-    public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
-            new PropertyDescriptor.Builder()
-                    .name("klab-controller-service")
-                    .displayName("k.LAB Controller Service")
-                    .description("This is an example on how to use the Java utilities.")
-                    .required(true)
-                    .identifiesControllerService(KlabController.class)
-                    .build();
+public class KlabObservationRequestGenerator extends AbstractProcessor {
 
     public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
             new PropertyDescriptor.Builder()
@@ -45,9 +38,8 @@ public class KlabContextInputProcessor extends AbstractProcessor {
             new PropertyDescriptor.Builder()
                     .name("observation-name")
                     .displayName("Name of the observation context.")
-                    .description("The name of the observation context.")
+                    .description("The name of the context observation, NEEDED if observing a context, not for quality observations and all.")
                     .required(false)
-                    .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
                     .build();
 
     public static final PropertyDescriptor OBSERVATION_SEMANTICS =
@@ -105,7 +97,7 @@ public class KlabContextInputProcessor extends AbstractProcessor {
                     .description("Starting time of observation as millis.")
                     .required(false)
                     .addValidator(StandardValidators.NUMBER_VALIDATOR)
-                    .defaultValue("1.km")
+                    .defaultValue("1577833200000")
                     .build();
 
     public static final PropertyDescriptor OBSERVATION_TIME_END =
@@ -115,7 +107,7 @@ public class KlabContextInputProcessor extends AbstractProcessor {
                     .description("End time of the observation as millis.")
                     .required(false)
                     .addValidator(StandardValidators.NUMBER_VALIDATOR)
-                    .defaultValue("1.km")
+                    .defaultValue("1640991599000")
                     .build();
 
     public static final PropertyDescriptor OBSERVATION_TIME_UNIT =
@@ -128,11 +120,31 @@ public class KlabContextInputProcessor extends AbstractProcessor {
                     .defaultValue("year")
                     .build();
 
+    public static final PropertyDescriptor OBSERVATION_TIME_SCOPE =
+            new PropertyDescriptor.Builder()
+                    .name("observation-tscope")
+                    .displayName("Temporal scope.")
+                    .description("Temporal scope of the observation.")
+                    .required(false)
+                    .addValidator(StandardValidators.NUMBER_VALIDATOR)
+                    .defaultValue("1")
+                    .build();
+
+    public static final PropertyDescriptor AS_CONTEXT =
+            new PropertyDescriptor.Builder()
+                    .name("as_context")
+                    .displayName("Set As Context")
+                    .description("To consider this as a context observation, if true, time and space is required as well")
+                    .required(false)
+                    .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+                    .build();
+
     public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
-            List.of(KLAB_CONTROLLER_SERVICE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME,
+            List.of(OBSERVATION_TIME_SCOPE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME,
                     OBSERVATION_SEMANTICS, OBSERVATION_ID,
                     OBSERVATION_SPACE, OBSERVATION_PROJECTION, OBSERVATION_GRID_SIZE,
-                    OBSERVATION_TIME_START, OBSERVATION_TIME_END, OBSERVATION_TIME_UNIT);
+                    OBSERVATION_TIME_START, OBSERVATION_TIME_END, OBSERVATION_TIME_UNIT,
+                    AS_CONTEXT);
 
     public static final Relationship REL_FAILURE =
             new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -162,33 +174,16 @@ public class KlabContextInputProcessor extends AbstractProcessor {
         relationships = Set.of(REL_FAILURE, REL_SUCCESS);
     }
 
-    private volatile boolean isRunning = false;
 
-    @OnStopped
-    public void onStopped(final ProcessContext context) {
-        isRunning = false;
-    }
-
-    @OnScheduled
-    public void onScheduled(final ProcessContext context) {
-        final KlabController controllerService =
-                context.getProperty(KLAB_CONTROLLER_SERVICE).asControllerService(KlabController.class);
-
-        isRunning = true;
-    }
 
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-        if (!isRunning) {
-            return;
-        }
 
-        KlabObservationNifiRequest.Builder requestBuilder = null;
+        KlabObservationNifiRequest.Builder requestBuilder = new KlabObservationNifiRequest.Builder();
         try {
             var builder = new KlabObservationNifiRequest.Builder();
 
             String projection = context.getProperty(OBSERVATION_PROJECTION).getValue();
-            // POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))
             String geometryWkt = context.getProperty(OBSERVATION_SPACE).getValue() == null // TODO if empty, ignore
                     || context.getProperty(OBSERVATION_SPACE).getValue().isBlank()
                     ? ""
@@ -224,23 +219,19 @@ public class KlabContextInputProcessor extends AbstractProcessor {
                             : context.getProperty(OBSERVATION_NAME).getValue();
 
             String semantics = context.getProperty(OBSERVATION_SEMANTICS).getValue();
-            requestBuilder =
-                    builder
-                            .setObservationName(name)
-                            .setObservationSemantics(semantics)
-                            .setGeometry(geometry);
+            String dtURL = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
+            boolean asContext = Boolean.parseBoolean(context.getProperty(AS_CONTEXT).getValue());
 
-            if (!context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue().isBlank()) {
-                requestBuilder.setDigitalTwin(context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue());
-            }
-
-        } catch (KlabNifiException e) {
-            throw new ProcessException(e);
-        }
-
-        try {
             FlowFile flowFile = session.create();
-            KlabObservationNifiRequest request = requestBuilder.build();
+
+            KlabObservationNifiRequest request = requestBuilder
+                    .setAsContext(asContext)
+                    .setDigitalTwin(dtURL)
+                    .setObservationSemantics(semantics)
+                    .setObservationName(name)
+                    .setGeometry(geometry)
+                    .build();
+
             flowFile =
                     session.write(
                             flowFile,
@@ -251,7 +242,7 @@ public class KlabContextInputProcessor extends AbstractProcessor {
 
             // Add attributes from event
             session.transfer(flowFile, REL_SUCCESS);
-            session.commitAsync();
+            //session.commitAsync();
 
         } catch (Exception e) {
             getLogger().error("Failed to process event", e);

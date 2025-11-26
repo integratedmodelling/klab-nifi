@@ -6,3 +6,4 @@ custom-nars
 **/__pycache__
 docker-compose.yml
 **/dist
+examples

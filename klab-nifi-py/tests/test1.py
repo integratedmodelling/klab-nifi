@@ -19,11 +19,11 @@ time = Time(
 klabNifiObs = KlabObservationNifiRequest(
     #space = space, 
     #time = time,
-    observationSemantics= "geography:Elevation",
+    observationSemantics= "geography:Aspect",
     #asContext=True,
     #observationName="el_capital",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.2p4wt6tysj",
-    id = -1,
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.3i4er9ljgx",
+    #id = -1,
 )
 
 print (klabNifiObs.to_dict())
