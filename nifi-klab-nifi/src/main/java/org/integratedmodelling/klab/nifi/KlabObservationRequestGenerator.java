@@ -187,8 +187,6 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
         String name = null;
 
         try {
-            var builder = new KlabObservationNifiRequest.Builder();
-
             boolean asContext = Boolean.parseBoolean(context.getProperty(AS_CONTEXT).getValue());
 
             if (asContext) {
