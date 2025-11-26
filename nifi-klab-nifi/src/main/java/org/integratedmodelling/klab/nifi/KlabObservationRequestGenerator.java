@@ -137,6 +137,7 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
                     .displayName("Set As Context")
                     .description("To consider this as a context observation, if true, time and space is required as well")
                     .required(false)
+                    .defaultValue("true")
                     .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
                     .build();
 
