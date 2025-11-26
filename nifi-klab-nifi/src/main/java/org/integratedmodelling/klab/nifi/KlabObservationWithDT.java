@@ -164,9 +164,8 @@ public class KlabObservationWithDT extends AbstractProcessor {
         session.transfer(flowfile, REL_FAILURE);
         return;
       }
-      klabController.addScope(
-          dtURL, contextScope); // Add the newly created ContextScope to the KlabController Map
-      getLogger().info("Fetched Context Scope successfully from DT: " + dtURL);
+    } else {
+      getLogger().info("Found the Context Scope for the k.LAB Controller");
     }
 
     // The Observable from the Semantics URN with the Reasoner Client
@@ -203,15 +202,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
       obs.setName(req.get().getObservationName());
     }
 
-//    ObservationImpl obs = DigitalTwin.createObservation(
-//            contextScope,
-//            observable,
-//            geometry.build(),
-//            req.get().getObservationName());
-
 
     obs.setUrn(req.get().getObservationSemantics());
-    obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
+    //obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
     // Convert the object to a pretty-printed JSON string
@@ -242,14 +235,23 @@ public class KlabObservationWithDT extends AbstractProcessor {
         then the context observation would be marked as context, and
         the future observations would be made in that context
       */
+      ContextScope ctxS = null;
       if (req.get().getAsContext()){
         getLogger().info("Setting the Context Observation with id: "
                 + resolvedObservation.getId()
                 + " as the Context for future Observation");
-        contextScope.within(resolvedObservation);
+        ctxS = contextScope.within(resolvedObservation);
       }
 
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
+
+      ContextScope ctxScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
+      if (ctxScope == null) {
+        klabController.addScope(
+                dtURL, ctxS); // Add the newly created ContextScope to the KlabController Map
+      }
+
+      getLogger().info("Fetched Context Scope successfully from DT: " + dtURL);
       getLogger().info("Success Flowfile being sent to Success Relation..");
       session.remove(flowfile);
       session.transfer(successFlowFile, REL_SUCCESS);

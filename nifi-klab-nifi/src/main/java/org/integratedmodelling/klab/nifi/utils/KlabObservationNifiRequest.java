@@ -20,14 +20,14 @@ public class KlabObservationNifiRequest {
   private final String semantics;
   private final String digitalTwin;
   private final boolean asContext;
-  private final long observationId;
+  private final long id;
 
   private KlabObservationNifiRequest(Builder builder) {
     this.geometry = builder.geometry;
     this.name = builder.name;
     this.semantics = builder.semantics;
     this.digitalTwin = builder.digitalTwin;
-    this.observationId = builder.observationId;
+    this.id = builder.id;
     this.asContext = builder.asContext;
   }
 
@@ -51,7 +51,7 @@ public class KlabObservationNifiRequest {
   }
 
   public long getObservationId() {
-    return observationId;
+    return id;
   }
 
   public String getDigitalTwin() { return digitalTwin; }
@@ -62,7 +62,7 @@ public class KlabObservationNifiRequest {
     private Geometry geometry;
     private String name;
     private String semantics;
-    private long observationId = KLAB_UNRESOLVED_OBS_ID;
+    private long id = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
     public boolean asContext;
 
@@ -87,7 +87,7 @@ public class KlabObservationNifiRequest {
     }
 
     public Builder setObservationId(long id) {
-      this.observationId = id;
+      this.id = id;
       return this;
     }
 
@@ -97,14 +97,17 @@ public class KlabObservationNifiRequest {
     }
 
     public KlabObservationNifiRequest build() throws KlabNifiException {
-      if (this.name == null) {
-        throw new KlabNifiException("Submitted Observation must have a Name");
+      if (this.name == null && this.asContext) {
+        throw new KlabNifiException("Submitted Context Observation must have a Name");
       }
 
       if (this.semantics == null) {
         throw new KlabNifiException("Submitted Observation must have a Semantics");
       }
 
+      if (this.digitalTwin == null) {
+        throw new KlabNifiException("Submitted Observation Request must have a Digital Twin URL");
+      }
       // A DT URL is not required in every case
 
       return new KlabObservationNifiRequest(this);

@@ -5,3 +5,5 @@ custom-nars
 *.egg-info
 **/__pycache__
 docker-compose.yml
+**/dist
+examples
