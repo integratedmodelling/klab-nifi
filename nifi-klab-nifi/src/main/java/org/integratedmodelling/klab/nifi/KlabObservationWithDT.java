@@ -37,6 +37,8 @@ import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
+import org.integratedmodelling.klab.api.services.runtime.Message;
+import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
@@ -204,6 +206,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
 
     obs.setUrn(req.get().getObservationSemantics());
+    Observation.ContextualizationData ctxData = new ObservationImpl.ContextualizationDataImpl();
+
+    //obs.setContextualizationData();
     //obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
@@ -213,13 +218,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
     AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
     observationRef.set(obs);
     Observation observation = observationRef.get();
+    FlowFile successFlowFile = session.create();
     try {
       CompletableFuture<Observation> future = contextScope.submit(observation);
       Observation resolvedObservation = future.get();
-      FlowFile successFlowFile = session.create();
       Map<String, String> attributes = new HashMap<>();
       attributes.put("observation.id", resolvedObservation.getId() + "");
       attributes.put("observation.type", resolvedObservation.getType().toString());
+
       System.out.println(resolvedObservation.getId() + " "
               + resolvedObservation.getName() + " "
               + resolvedObservation.getObservable() + " "
@@ -228,6 +234,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
       System.out.println(prettyGson.toJson(resolvedObservation));
 
+      if (resolvedObservation.getId() == -1) {
+        getLogger().info("The submitted Observation couldn't be resolved");
+        contextScope.send(
+                Message.MessageClass.DigitalTwin,
+                Message.MessageType.Error,
+                resolvedObservation);
+        throw new Exception("The Submitted Observation couldn't be resolved");
+      }
       /*
         If asContext parameter has been set, and the observation submitted has
         a Semantics of earth:Terrestrial earth:Region and should
@@ -241,23 +255,29 @@ public class KlabObservationWithDT extends AbstractProcessor {
                 + resolvedObservation.getId()
                 + " as the Context for future Observation");
         ctxS = contextScope.within(resolvedObservation);
+        klabController.addScope(dtURL, ctxS);
+
+        contextScope.send(
+                Message.MessageClass.DigitalTwin,
+                Message.MessageType.ContextObservationResolved,
+                resolvedObservation);
       }
 
+      getLogger().info("Sending Messages of Observation Submission Finished for the Digital Twin..");
+      contextScope.send(
+              Message.MessageClass.DigitalTwin,
+              Message.MessageType.ObservationSubmissionFinished,
+              resolvedObservation
+      );
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
-
       ContextScope ctxScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
-      if (ctxScope == null) {
-        klabController.addScope(
-                dtURL, ctxS); // Add the newly created ContextScope to the KlabController Map
-      }
-
-      getLogger().info("Fetched Context Scope successfully from DT: " + dtURL);
       getLogger().info("Success Flowfile being sent to Success Relation..");
       session.remove(flowfile);
       session.transfer(successFlowFile, REL_SUCCESS);
     } catch (Exception e) {
       getLogger().error("Error in processing Observation: ", e);
       getLogger().info("Routing Success Flowfile to Failure Rel");
+      session.remove(successFlowFile);
       session.transfer(flowfile, REL_FAILURE);
     }
   }

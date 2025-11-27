@@ -99,7 +99,7 @@ public class MessageRelayProcessor extends AbstractProcessor {
     // this is way uglier but works. Can be done by finding the identifiers by class first. TODO check for null
     var controllerService =
         (KlabController)
-            context.getControllerServiceLookup().getControllerService("klab-controller-service");
+            context.getControllerServiceLookup().getControllerService("KlabControllerWithDTService");
     // Unregister listener
     controllerService.removeEventListener(this::handleEvent);
     eventQueue.clear();

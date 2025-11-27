@@ -34,17 +34,14 @@ public interface KlabController extends ControllerService {
    * @return the scope requested. A scope appropriate for the request will be created if not
    *     configured in advance.
    */
-  Scope getScope(Class<? extends Scope> scopeClass);
 
   Scope getScope(String dtURL, Class<? extends Scope> scopeClass);
+
+  Scope getScope(Class<? extends Scope> scopeClass);
+
+  void addScope(String dtURL, Scope scope) throws KlabAuthorizationException;
 
   void addEventListener(Consumer<EventData> listener);
 
   void removeEventListener(Consumer<EventData> listener);
-
-  void addScope(String dtURL, Scope scope) throws KlabAuthorizationException;
-
-  Scope createScope(String dtURL) throws KlabAuthorizationException;
-
-  boolean containsDT(String dtUrl);
 }
