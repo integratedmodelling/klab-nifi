@@ -1,4 +1,5 @@
 from .geometry import *
+from .contextualizer import Contextualizer
 from .logging import logger
 import requests
 import logging
@@ -26,6 +27,7 @@ class KlabObservationNifiRequest(BaseModel):
                  time:Time=None,
                  dtURL:str=None,
                  id:int=None,
+                 contextualizer:Contextualizer=None,
                  loglevel:str=logging.INFO):
         
         logger.debug("KLAB Nifi Observation Initialized")
@@ -35,19 +37,27 @@ class KlabObservationNifiRequest(BaseModel):
         if not observationName and asContext:
             raise KlabNifiException("Observation Name cannot be non null for Context Observations")
         else:
-            logger.info("Setting Name to the Observation")
-            self.name = observationName
+            if observationName:
+                logger.info("Setting Name to the Observation")
+                self.name = observationName
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
 
         logger.info("Setting Name and Semantics to the Observation")
 
+        if contextualizer :
+            logger.info("Setting Contextualizer to the Observation")
+            self.contextualizer = contextualizer
+
 
         ##TODO: check how can we validate the semantics here without the Python Client
         ## Keeping it as it is for now
         self.semantics = observationSemantics 
         self.asContext = asContext
+
+        if contextualizer and asContext:
+            raise KlabNifiException("Contextualizer cannot be set for Context Observations")
 
         if self.asContext and (not space or not time or observationSemantics != CONTEXT_OBSERVATION_SEMANTICS) :
             raise KlabNifiException("Context Observations must have both Space and Time defined, "
@@ -61,8 +71,7 @@ class KlabObservationNifiRequest(BaseModel):
             logger.debug("Setting the Digital Twin URL")
             self.digitalTwin = dtURL
         else:
-            logger.warning("Digital Twin URL not set, the KlabObservation " \
-            "Nifi Processor along with KlabController Service should be used to resolve k.LAB Observations")
+            raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
 
         if id:
             logger.debug("Setting observation ID")

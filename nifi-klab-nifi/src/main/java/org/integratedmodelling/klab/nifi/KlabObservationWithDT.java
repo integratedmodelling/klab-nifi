@@ -1,10 +1,9 @@
 package org.integratedmodelling.klab.nifi;
 
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXT_OBSERVSTION_SEMANTICS;
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESOLVED_OBS_ID;
-
 import com.google.gson.*;
 import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -27,8 +26,9 @@ import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.collections.Parameters;
+import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
-import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
@@ -37,9 +37,11 @@ import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
+import org.integratedmodelling.klab.api.services.RuntimeService;
 import org.integratedmodelling.klab.api.services.runtime.Message;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
+
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_TYPE_KEY;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @InputRequirement(
@@ -180,6 +182,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     System.out.println(prettyGson.toJson(observable));
     System.out.println("Observable Generated..");
+
     ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
 
     if (req.get().getAsContext()) {
@@ -204,11 +207,16 @@ public class KlabObservationWithDT extends AbstractProcessor {
       obs.setName(req.get().getObservationName());
     }
 
-
     obs.setUrn(req.get().getObservationSemantics());
-    Observation.ContextualizationData ctxData = new ObservationImpl.ContextualizationDataImpl();
 
-    //obs.setContextualizationData();
+    ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
+            contextScope,
+            req.get().getContextualizer());
+
+    if (!req.get().getAsContext()) {
+      obs.setContextualizationData(ctxData);
+    }
+
     //obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
@@ -219,6 +227,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
     observationRef.set(obs);
     Observation observation = observationRef.get();
     FlowFile successFlowFile = session.create();
+
     try {
       CompletableFuture<Observation> future = contextScope.submit(observation);
       Observation resolvedObservation = future.get();
@@ -280,5 +289,32 @@ public class KlabObservationWithDT extends AbstractProcessor {
       session.remove(successFlowFile);
       session.transfer(flowfile, REL_FAILURE);
     }
+  }
+
+
+  private static ObservationImpl.ContextualizationDataImpl getContextualizationData(ContextScope scope, Map<String, Object> params) {
+
+    if (params == null) {
+      return null;
+    }
+    var ctxData = new ObservationImpl.ContextualizationDataImpl();
+    ctxData.setAdapterId((String) params.get(KLAB_CONTEXTUALIZER_TYPE_KEY));
+    // Would always be castable, guaranteed by the client
+    ctxData.setServiceId(scope.getService(RuntimeService.class).serviceId());
+    ctxData.setServiceUrl(scope.getService(RuntimeService.class).getUrl());
+    ParametersImpl<String> ctxParams = new ParametersImpl<>();
+    for(Map.Entry<String, Object> entry : params.entrySet()) {
+      String key = entry.getKey();
+      Object value = entry.getValue();
+      if (!(key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY))) {
+        if (value instanceof Number ) {
+          ctxParams.put(key, (int) value);
+        } else {
+          ctxParams.put(key, String.valueOf(value));
+        }
+      }
+    }
+    ctxData.setParameters(ctxParams);
+    return ctxData;
   }
 }

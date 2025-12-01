@@ -5,6 +5,8 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESO
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import java.util.Date;
+import java.util.Map;
+
 import org.integratedmodelling.common.utils.Utils;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
@@ -20,6 +22,7 @@ public class KlabObservationNifiRequest {
   private final String semantics;
   private final String digitalTwin;
   private final boolean asContext;
+  private final Map<String, Object> contextualizer;
   private final long id;
 
   private KlabObservationNifiRequest(Builder builder) {
@@ -29,6 +32,7 @@ public class KlabObservationNifiRequest {
     this.digitalTwin = builder.digitalTwin;
     this.id = builder.id;
     this.asContext = builder.asContext;
+    this.contextualizer = builder.contextualizer;
   }
 
   /** Serialize this object to JSON */
@@ -54,6 +58,10 @@ public class KlabObservationNifiRequest {
     return id;
   }
 
+  public Map<String, Object> getContextualizer() {
+    return contextualizer;
+  }
+
   public String getDigitalTwin() { return digitalTwin; }
 
   public boolean getAsContext() { return asContext; }
@@ -65,9 +73,15 @@ public class KlabObservationNifiRequest {
     private long id = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
     public boolean asContext;
+    public Map<String, Object> contextualizer;
 
     public Builder setAsContext(boolean asContext){
       this.asContext = asContext;
+      return this;
+    }
+
+    public Builder setContextualizer(Map<String, Object> contextualizer) {
+      this.contextualizer = contextualizer;
       return this;
     }
 
@@ -303,4 +317,5 @@ public class KlabObservationNifiRequest {
       }
     }
   }
+
 }

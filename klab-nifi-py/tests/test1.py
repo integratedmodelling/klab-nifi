@@ -1,4 +1,4 @@
-from klab_nifi_py import *
+from klab_nifi_py import * 
 
 
 space = Space(
@@ -14,16 +14,25 @@ time = Time(
     tend = dt_2021
     )
 
+ctx = contextualizer.WCS(
+    wcsIdentifier="im-data-global-geography__elevation-global-90m",
+)
+
+stacCtx = contextualizer.STAC(
+    stacCollection="im-data-global-geography", 
+    stacAsset="elevation-global-90m"
+)
+
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    #space = space, 
-    #time = time,
-    observationSemantics= "geography:Aspect",
-    #asContext=True,
-    #observationName="el_capital",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.3i4er9ljgx",
-    #id = -1,
+    ##space = space, 
+    ##time = time,
+    observationSemantics= "geography:Elevation",
+    ##asContext=True,
+    ##observationName="el_capital",
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.8ml2b8ft32",
+    contextualizer=ctx
 )
 
 print (klabNifiObs.to_dict())
