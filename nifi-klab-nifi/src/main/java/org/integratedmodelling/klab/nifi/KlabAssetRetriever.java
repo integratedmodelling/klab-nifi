@@ -11,6 +11,7 @@ import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.behavior.ReadsAttributes;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
+import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -30,6 +31,8 @@ import org.integratedmodelling.klab.api.services.RuntimeService;
 @CapabilityDescription("Retrieves Asset from the Digital Twin with the Resolved Semantic Query"
         + "Should be placed after the Observation Relay Processor"
 + "Read the Attributes of the Resolved Observation from the Processor")
+
+@SeeAlso({KlabControllerWithDTService.class, KlabObservationWithDT.class})
 
 @ReadsAttributes({
         @ReadsAttribute(
@@ -52,7 +55,7 @@ import org.integratedmodelling.klab.api.services.RuntimeService;
 })
 @InputRequirement(InputRequirement.Requirement.INPUT_REQUIRED)
 
-public class KlabAssetRetreiver extends AbstractProcessor {
+public class KlabAssetRetriever extends AbstractProcessor {
 
     public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
             new PropertyDescriptor.Builder()
