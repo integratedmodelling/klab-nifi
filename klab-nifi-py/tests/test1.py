@@ -2,7 +2,7 @@ from klab_nifi_py import *
 
 
 space = Space(
-    shape= "POLYGON ((77.11183309467745 28.558406270223728, 77.13158011521391 28.57649245320077, 77.1527376372173 28.55914959926227, 77.13355481726757 28.54056479885392, 77.11183309467745 28.558406270223728))",
+    shape= "POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))",
 )
 
 dt_2020 = datetime(2020, 1, 1, 0, 0, 0)
@@ -19,8 +19,8 @@ ctx = contextualizer.WCS(
 )
 
 stacCtx = contextualizer.STAC(
-    stacCollection="im-data-global-geography", 
-    stacAsset="elevation-global-90m"
+    stacCollection="https://earth-search.aws.element84.com/v1/collections/sentinel-2-pre-c1-l2a", 
+    stacAsset="red"
 )
 
 
@@ -28,10 +28,11 @@ stacCtx = contextualizer.STAC(
 klabNifiObs = KlabObservationNifiRequest(
     ##space = space, 
     ##time = time,
-    observationSemantics= "geography:Elevation",
+    observationSemantics= "geography:Aspect",
+    ##observationSemantics= "earth:Terrestrial earth:Region",
     ##asContext=True,
     ##observationName="el_capital",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.8ml2b8ft32",
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.9ipy8tyv1o",
     contextualizer=ctx
 )
 

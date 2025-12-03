@@ -3,19 +3,18 @@ package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.Gson;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
-import org.apache.nifi.annotation.lifecycle.OnScheduled;
-import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
-import org.integratedmodelling.klab.nifi.utils.KlabNifiException;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /** An processor that builds a valid flowfile to be passed to the
  *  Observation Submitter Processor, by the means of setting different
@@ -141,12 +140,21 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
                     .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
                     .build();
 
+    public static final PropertyDescriptor CONTEXTUALIZER_PARAMS =
+            new PropertyDescriptor.Builder()
+                    .name("Contexetualizer Params")
+                    .displayName("Parameters of the Contextualizer (Modeller for Examples)")
+                    .required(false)
+                    .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                    .build();
+
+
     public static final List<PropertyDescriptor> PROPERTY_DESCRIPTORS =
             List.of(OBSERVATION_TIME_SCOPE, DIGITAL_TWIN_URL_PROPERTY, OBSERVATION_NAME,
                     OBSERVATION_SEMANTICS, OBSERVATION_ID,
                     OBSERVATION_SPACE, OBSERVATION_PROJECTION, OBSERVATION_GRID_SIZE,
                     OBSERVATION_TIME_START, OBSERVATION_TIME_END, OBSERVATION_TIME_UNIT,
-                    AS_CONTEXT);
+                    AS_CONTEXT, CONTEXTUALIZER_PARAMS);
 
     public static final Relationship REL_FAILURE =
             new Relationship.Builder().description("Failed processing").name("failure").build();
@@ -237,13 +245,24 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
             String dtURL = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
 
             FlowFile flowFile = session.create();
+            String contextualizer_params = context.getProperty(CONTEXTUALIZER_PARAMS).getValue();
+            ObjectMapper mapper = new ObjectMapper();
 
-            // dtURL and Semantics are set up for all the requests
+            // dtURL and Semantics are required for all the requests
             // other wise the workflow will fail
-            KlabObservationNifiRequest request = requestBuilder
+
+
+            requestBuilder = requestBuilder
                     .setDigitalTwin(dtURL)
-                    .setObservationSemantics(semantics)
-                    .build();
+                    .setObservationSemantics(semantics);
+
+            if (contextualizer_params != null) {
+                Map<String, Object> params = mapper.readValue(contextualizer_params, Map.class);
+                requestBuilder = requestBuilder
+                        .setContextualizer(params);
+            }
+
+            KlabObservationNifiRequest request = requestBuilder.build();
 
             flowFile =
                     session.write(

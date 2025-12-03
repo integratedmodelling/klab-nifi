@@ -7,3 +7,5 @@ custom-nars
 docker-compose.yml
 **/dist
 examples
+nifi_input
+nifi_input

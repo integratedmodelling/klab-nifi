@@ -59,7 +59,15 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEX
       description = "Writes the Id of the Observation made"),
   @WritesAttribute(
       attribute = "observation.type",
-      description = "Writes the type of the Observation made")
+      description = "Writes the type of the Observation made"),
+  @WritesAttribute(
+          attribute = "observation.urn",
+          description = "Writes the URN of the observation once resolved by k.LAB"
+  ),
+  @WritesAttribute(
+          attribute = "digital.twin.url",
+          description = "Writes the URL of the Digital Twin to which the Resolved Observation" +
+                  "is added after Resolution")
 })
 public class KlabObservationWithDT extends AbstractProcessor {
 
@@ -234,6 +242,8 @@ public class KlabObservationWithDT extends AbstractProcessor {
       Map<String, String> attributes = new HashMap<>();
       attributes.put("observation.id", resolvedObservation.getId() + "");
       attributes.put("observation.type", resolvedObservation.getType().toString());
+      attributes.put("observation.urn", resolvedObservation.getUrn());
+      attributes.put("digital.twin.url", dtURL);
 
       System.out.println(resolvedObservation.getId() + " "
               + resolvedObservation.getName() + " "
@@ -243,6 +253,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
       System.out.println(prettyGson.toJson(resolvedObservation));
 
+      // If the ID is -1, the Resolution Process failed
       if (resolvedObservation.getId() == -1) {
         getLogger().info("The submitted Observation couldn't be resolved");
         contextScope.send(
@@ -308,7 +319,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       Object value = entry.getValue();
       if (!(key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY))) {
         if (value instanceof Number ) {
-          ctxParams.put(key, (int) value);
+          ctxParams.put(key, ((Number) value).intValue());
         } else {
           ctxParams.put(key, String.valueOf(value));
         }

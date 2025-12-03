@@ -73,13 +73,6 @@ class KlabObservationNifiRequest(BaseModel):
         else:
             raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
 
-        if id:
-            logger.debug("Setting observation ID")
-            self.id = id
-        else:
-            logger.debug("Setting unresolved observation ID")
-            self.id = -1
-
         logger.info("Initial Validations Passed, Observation Payload Created")
 
 
