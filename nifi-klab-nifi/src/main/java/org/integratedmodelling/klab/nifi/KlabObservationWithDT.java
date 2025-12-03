@@ -245,11 +245,11 @@ public class KlabObservationWithDT extends AbstractProcessor {
       attributes.put("observation.urn", resolvedObservation.getUrn());
       attributes.put("digital.twin.url", dtURL);
 
-      System.out.println(resolvedObservation.getId() + " "
-              + resolvedObservation.getName() + " "
-              + resolvedObservation.getObservable() + " "
-              + resolvedObservation.getResolvedCoverage() + " "
-              + resolvedObservation.getType().toString());
+      System.out.println("Observation ID: " + resolvedObservation.getId() + "\n"
+              + "Observation Name: " + resolvedObservation.getName() + "\n"
+              + resolvedObservation.getObservable() + "\n"
+              + "Resolved Coverage: " + resolvedObservation.getResolvedCoverage() + "\n"
+              + "Observation Type: " + resolvedObservation.getType().toString());
 
       System.out.println(prettyGson.toJson(resolvedObservation));
 
