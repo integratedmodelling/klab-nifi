@@ -115,15 +115,14 @@ public class KlabControllerWithDTService extends AbstractControllerService imple
 
     final boolean useDefaultPath = this.certificatePath == null || this.certificatePath.isBlank();
     if (useDefaultPath) {
-      getLogger().warn("USING DEFAULT PATH");
+      getLogger().debug("Using default certificate path");
       this.userScope = engine.authenticate();
-      getLogger().warn("USER SCOPE: " + this.userScope);
+      getLogger().debug("User scope: " + this.userScope);
     } else {
-      getLogger().warn("USING PATH: " + this.certificatePath);
+      getLogger().debug("Using certificate path: " + this.certificatePath);
 
       var certificateUri = new URI(this.certificatePath);
       var exists = Files.exists(Paths.get(certificateUri));
-      getLogger().warn("CERT EXISTS: " + exists);
 
       var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
       if (!certificateFile.exists()) {
