@@ -241,6 +241,7 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
 
             }
 
+            int id = Integer.parseInt(context.getProperty(OBSERVATION_ID).getValue());
             String semantics = context.getProperty(OBSERVATION_SEMANTICS).getValue();
             String dtURL = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
 
@@ -249,10 +250,10 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
             ObjectMapper mapper = new ObjectMapper();
 
             // dtURL and Semantics are required for all the requests
-            // other wise the workflow will fail
-
+            // otherwise the workflow will fail
 
             requestBuilder = requestBuilder
+                    .setObservationId(id)
                     .setDigitalTwin(dtURL)
                     .setObservationSemantics(semantics);
 
