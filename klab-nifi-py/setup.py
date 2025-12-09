@@ -2,9 +2,11 @@ from setuptools import setup, find_packages
 
 setup(
     name="klab_nifi_py",            
-    version="0.0.1-beta",                
+    version="0.0.2",                
     author="Arnab Moitra",
     author_email="arnab.moitra@bc3research.org",
+    maintainer="Artificial Intelligence For Environment and Sustainability (ARIES) Team, Basque Centre for Climate Change (BC3)",
+    maintainer_email="support@integratedmodelling.org",
     description="Python Based Workflow to Interact with K.LAB Semantic Web, using Apache Nifi",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

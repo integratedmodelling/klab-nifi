@@ -26,6 +26,9 @@ import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.RuntimeService;
 
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_TIFF_EXTENSION;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_TIFF_MEDIA_TYPE;
+
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @CapabilityDescription("Retrieves Asset from the Digital Twin with the Resolved Semantic Query"
@@ -74,7 +77,8 @@ public class KlabAssetRetriever extends AbstractProcessor {
                     .description(
                             "The Local Directory System, where to write the Results from the k.LAB Semantic Web")
                     .required(true)
-                    .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                    .defaultValue("/opt/nifi/output") // IF run with docker, this should be mounted upon ./nifi_output
+                    .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
                     .build();
 
     public static final Relationship REL_FAILURE =
@@ -153,10 +157,10 @@ public class KlabAssetRetriever extends AbstractProcessor {
                                 .exportAsset(
                                         obsUrn,
                                         KlabAsset.KnowledgeClass.OBSERVATION,
-                                        "image/png",
-                                        Parameters.create("viewportX", 800, "viewportY", 800),
+                                        KLAB_TIFF_MEDIA_TYPE,
+                                        Parameters.create(),
                                         contextScope),
-                        "png", nifiOutputDir);
+                        KLAB_TIFF_EXTENSION, nifiOutputDir);
 
                 getLogger().info("Exported the Required Observation to " + mapImage.getName());
                 session.transfer(flowfile, REL_SUCCESS);

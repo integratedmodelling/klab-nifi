@@ -215,8 +215,6 @@ public class KlabObservationWithDT extends AbstractProcessor {
       obs.setName(req.get().getObservationName());
     }
 
-    obs.setUrn(req.get().getObservationSemantics());
-
     ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
             contextScope,
             req.get().getContextualizer());
@@ -248,7 +246,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       System.out.println("Observation ID: " + resolvedObservation.getId() + "\n"
               + "Observation Name: " + resolvedObservation.getName() + "\n"
               + resolvedObservation.getObservable() + "\n"
-              + "Resolved Coverage: " + resolvedObservation.getResolvedCoverage() + "\n"
+              + "Observation URN: " + resolvedObservation.getUrn() + "\n"
               + "Observation Type: " + resolvedObservation.getType().toString());
 
       System.out.println(prettyGson.toJson(resolvedObservation));
