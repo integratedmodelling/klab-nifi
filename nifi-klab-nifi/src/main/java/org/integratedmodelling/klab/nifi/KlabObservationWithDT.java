@@ -44,8 +44,8 @@ import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_TYPE_KEY;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
-@InputRequirement(
-    InputRequirement.Requirement.INPUT_REQUIRED) // This shouldn't be the first processor
+//@InputRequirement(
+//    InputRequirement.Requirement.INPUT_REQUIRED) // This shouldn't be the first processor
 @CapabilityDescription(
     "Parses incoming Flowfiles and creates an Observation Obj"
         + "Also is responsible for some pre validation steps"
