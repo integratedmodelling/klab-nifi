@@ -28,12 +28,12 @@ stacCtx = contextualizer.STAC(
 klabNifiObs = KlabObservationNifiRequest(
     ##space = space, 
     ##time = time,
-    observationSemantics= "geography:Aspect",
+    observationSemantics= "geography:Slope",
     ##observationSemantics= "earth:Terrestrial earth:Region",
     ##asContext=True,
     ##observationName="el_capital",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.9ipy8tyv1o",
-    contextualizer=ctx
+    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.f8zx3uma7o",
+    contextualizer=stacCtx
 )
 
 print (klabNifiObs.to_dict())

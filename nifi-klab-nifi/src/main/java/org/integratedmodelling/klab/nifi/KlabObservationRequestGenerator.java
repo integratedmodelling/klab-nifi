@@ -21,7 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *  things in the Parameters */
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
-@InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
+//@InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class KlabObservationRequestGenerator extends AbstractProcessor {
 
     public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
