@@ -231,6 +231,11 @@ public class KlabControllerWithDTService extends AbstractControllerService imple
   }
 
   @Override
+  public void removeScope(String dtURL) {
+    this.scopeMap.remove(dtURL);
+  }
+
+  @Override
   public Scope getScope(Class<? extends Scope> scopeClass) {
     // TODO check if scope is configured for this user. If not, a default session scope and context
     //  scope can be created when the correspondent classes are requested.

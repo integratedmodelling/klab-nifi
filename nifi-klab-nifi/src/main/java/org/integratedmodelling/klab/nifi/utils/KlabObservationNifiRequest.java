@@ -22,6 +22,7 @@ public class KlabObservationNifiRequest {
   private final String semantics;
   private final String digitalTwin;
   private final boolean asContext;
+  private final boolean resetContext;
   private final Map<String, Object> contextualizer;
   private final long id;
 
@@ -32,6 +33,7 @@ public class KlabObservationNifiRequest {
     this.digitalTwin = builder.digitalTwin;
     this.id = builder.id;
     this.asContext = builder.asContext;
+    this.resetContext = builder.resetContext;
     this.contextualizer = builder.contextualizer;
   }
 
@@ -65,6 +67,7 @@ public class KlabObservationNifiRequest {
   public String getDigitalTwin() { return digitalTwin; }
 
   public boolean getAsContext() { return asContext; }
+  public boolean getResetContext() {return resetContext; }
 
   public static class Builder {
     private Geometry geometry;
@@ -73,8 +76,13 @@ public class KlabObservationNifiRequest {
     private long id = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
     public boolean asContext;
+    public boolean resetContext;
     public Map<String, Object> contextualizer;
 
+    public Builder setResetContext(boolean resetContext) {
+      this.resetContext = resetContext;
+      return this;
+    }
     public Builder setAsContext(boolean asContext){
       this.asContext = asContext;
       return this;

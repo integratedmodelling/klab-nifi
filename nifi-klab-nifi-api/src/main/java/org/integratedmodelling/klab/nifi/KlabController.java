@@ -37,6 +37,8 @@ public interface KlabController extends ControllerService {
 
   Scope getScope(String dtURL, Class<? extends Scope> scopeClass);
 
+  void removeScope(String dtURL);
+
   Scope getScope(Class<? extends Scope> scopeClass);
 
   void addScope(String dtURL, Scope scope) throws KlabAuthorizationException;

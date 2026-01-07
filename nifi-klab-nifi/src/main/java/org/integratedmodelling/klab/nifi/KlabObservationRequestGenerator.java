@@ -21,6 +21,7 @@ import org.integratedmodelling.klab.nifi.utils.ObservationParameters;
 /** An processor that builds a valid flowfile to be passed to the
  *  Observation Submitter Processor, by the means of setting different
  *  things in the Parameters */
+
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @CapabilityDescription("Generates FlowFiles when events are received from k.LAB Controller Service")
 @InputRequirement(InputRequirement.Requirement.INPUT_ALLOWED)

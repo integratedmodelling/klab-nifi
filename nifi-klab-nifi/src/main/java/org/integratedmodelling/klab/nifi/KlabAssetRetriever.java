@@ -130,9 +130,14 @@ public class KlabAssetRetriever extends AbstractProcessor {
 
         String dtURL = flowfile.getAttribute("digital.twin.url");
         String obsType = flowfile.getAttribute("observation.type");
-        String obsId = flowfile.getAttribute("observation.id");
         String obsUrn = flowfile.getAttribute("observation.urn");
         getLogger().info("Found the Observation URN: " + obsUrn);
+
+        if (obsType == null) {
+            getLogger().info("Found Observation Type to be null, this can happen if a Reset Context call was made!");
+            session.transfer(flowfile, REL_SUCCESS);
+            return;
+        }
 
         if (obsType.equals("NUMBER")) {
             ContextScope contextScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);

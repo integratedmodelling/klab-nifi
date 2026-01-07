@@ -1,4 +1,5 @@
 from .geometry import *
+from urllib.parse import urlparse
 from .contextualizer import Contextualizer
 from .logging import logger
 import requests
@@ -23,16 +24,34 @@ class KlabObservationNifiRequest(BaseModel):
                  observationName:str=None,
                  observationSemantics:str=None,
                  asContext:bool=False,
+                 resetContext:bool=False,
                  space:Space=None,
                  time:Time=None,
                  dtURL:str=None,
-                 id:int=None,
                  contextualizer:Contextualizer=None,
                  loglevel:str=logging.INFO):
         
         logger.debug("KLAB Nifi Observation Initialized")
-        logger.info("Building the Nifi Observation")
         logger.setLevel(loglevel)
+
+        if dtURL :
+            logger.debug("Validating and Setting the Digital Twin URL")
+            parsed = urlparse(dtURL)
+            if not all([parsed.scheme, parsed.netloc]):
+                raise KlabNifiException("Digital Twin URL is not valid")
+            
+            self.digitalTwin = dtURL
+        else:
+            raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
+
+        if resetContext and (space or time or contextualizer or asContext or observationName or observationSemantics):
+            raise KlabNifiException("Reset Context cannot be set along with other Observation Parameters")
+
+        if resetContext:
+            logger.info("Resetting Context for the Observation, Context Observation must be made prior to the future observations submitted")
+            self.resetContext = True
+            return
+
 
         if not observationName and asContext:
             raise KlabNifiException("Observation Name cannot be non null for Context Observations")
@@ -43,8 +62,6 @@ class KlabObservationNifiRequest(BaseModel):
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
-
-        logger.info("Setting Name and Semantics to the Observation")
 
         if contextualizer :
             logger.info("Setting Contextualizer to the Observation")
@@ -67,11 +84,6 @@ class KlabObservationNifiRequest(BaseModel):
             logger.debug("Setting Geometry")
             self.geometry = Geometry(space, time)
 
-        if dtURL :
-            logger.debug("Setting the Digital Twin URL")
-            self.digitalTwin = dtURL
-        else:
-            raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
 
         logger.info("Initial Validations Passed, Observation Payload Created")
 

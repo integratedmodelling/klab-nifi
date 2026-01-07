@@ -167,6 +167,13 @@ public class KlabObservationWithDT extends AbstractProcessor {
       return;
     }
 
+    if (req.get().getResetContext()) {
+      getLogger().info("Resetting the Context, another Context Observation would be required to be made");
+      klabController.removeScope(dtURL);
+      session.transfer(flowfile, REL_SUCCESS);
+      return;
+    }
+
     ContextScope contextScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
     if (contextScope == null) {
       getLogger().info("No ContextScope available from the KlabController for the DT " + dtURL);
@@ -180,6 +187,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       getLogger().info("Found the Context Scope for the k.LAB Controller");
     }
 
+
     // The Observable from the Semantics URN with the Reasoner Client
     Observable observable =
         contextScope
@@ -191,7 +199,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
     System.out.println(prettyGson.toJson(observable));
     System.out.println("Observable Generated..");
 
-    ObservationImpl obs = DigitalTwin.createObservation(contextScope, observable);
+    ObservationImpl obs = null;
 
     if (req.get().getAsContext()) {
       /*
@@ -211,9 +219,12 @@ public class KlabObservationWithDT extends AbstractProcessor {
                               req.get().getGeometry().getTime().getTend())
                       .resolution(Time.Resolution.Type.YEAR, req.get().getGeometry().getTime().getTscope())
                       .build();
-      obs.setGeometry(geometry.build());
-      obs.setName(req.get().getObservationName());
+
+      obs = DigitalTwin.createObservation(contextScope, observable, geometry.build(), req.get().getObservationName());
+    } else {
+      obs = DigitalTwin.createObservation(contextScope, observable);
     }
+
 
     ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
             contextScope,
@@ -223,7 +234,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       obs.setContextualizationData(ctxData);
     }
 
-    //obs.setId(KLAB_UNRESOLVED_OBS_ID); // Unresolved Observation ID is -1
+    obs.setId(Observation.UNASSIGNED_ID);
     getLogger().info("Observation Payload Generation done, submitting the Observation");
 
     // Convert the object to a pretty-printed JSON string
@@ -271,7 +282,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
       if (req.get().getAsContext()){
         getLogger().info("Setting the Context Observation with id: "
                 + resolvedObservation.getId()
-                + " as the Context for future Observation");
+                + " as the Context for future Observation(s)");
         ctxS = contextScope.within(resolvedObservation);
         klabController.addScope(dtURL, ctxS);
 
