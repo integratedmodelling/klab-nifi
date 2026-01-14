@@ -25,26 +25,24 @@ stacCtx = contextualizer.STAC(
     
 )
 
-#3stacCtx.serviceType = "a"
-
 
 
 klabNifiObs = KlabObservationNifiRequest(
     ##space = space, 
     ##time = time,
     ##resetContext=True,
-    observationSemantics= "geography:Slope",
+    observationSemantics= "geography:Elevation",
     ##observationSemantics= "earth:Terrestrial earth:Region",
     ##asContext=True,
     ##observationName="am1729",
-    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.g9r69oqgr7",
-    contextualizer=ctx,
+    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.gc1usfwodz",
+    ##contextualizer=stacCtx,
 )
 
 print (klabNifiObs.to_dict())
 
 print (klabNifiObs.to_json())
 
-##nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
-##nifiklabClient.submitObservation(klabNifiObs)
+nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
+nifiklabClient.submitObservation(klabNifiObs)
 

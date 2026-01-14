@@ -231,7 +231,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
             contextScope,
             req.get().getContextualizer());
 
-    if (!req.get().getAsContext()) {
+    if (!req.get().getAsContext() || ctxData != null) {
       obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
     }
 
@@ -318,6 +318,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
     if (params == null) {
       return null;
     }
+
     var ctxData = new ObservationImpl.ContextualizationDataImpl();
     ctxData.setAdapterId((String) params.get(KLAB_CONTEXTUALIZER_TYPE_KEY)); // stac, wcs or wfs
     ctxData.setPersistent((boolean) params.get(KLAB_CONTEXTUALIZER_PERSISTENCE_KEY)); // to persist the data or not
