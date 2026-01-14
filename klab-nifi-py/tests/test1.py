@@ -31,12 +31,12 @@ klabNifiObs = KlabObservationNifiRequest(
     ##space = space, 
     ##time = time,
     ##resetContext=True,
-    observationSemantics= "geography:Elevation",
+    observationSemantics= "geography:Aspect",
     ##observationSemantics= "earth:Terrestrial earth:Region",
     ##asContext=True,
     ##observationName="am1729",
     dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.gc1usfwodz",
-    ##contextualizer=stacCtx,
+    contextualizer=stacCtx,
 )
 
 print (klabNifiObs.to_dict())
