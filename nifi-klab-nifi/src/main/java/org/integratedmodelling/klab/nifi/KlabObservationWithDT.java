@@ -41,6 +41,7 @@ import org.integratedmodelling.klab.api.services.RuntimeService;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_PERSISTENCE_KEY;
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_TYPE_KEY;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
@@ -231,7 +232,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
             req.get().getContextualizer());
 
     if (!req.get().getAsContext()) {
-      obs.setContextualizationData(ctxData);
+      obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
     }
 
     obs.setId(Observation.UNASSIGNED_ID);
@@ -318,7 +319,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
       return null;
     }
     var ctxData = new ObservationImpl.ContextualizationDataImpl();
-    ctxData.setAdapterId((String) params.get(KLAB_CONTEXTUALIZER_TYPE_KEY));
+    ctxData.setAdapterId((String) params.get(KLAB_CONTEXTUALIZER_TYPE_KEY)); // stac, wcs or wfs
+    ctxData.setPersistent((boolean) params.get(KLAB_CONTEXTUALIZER_PERSISTENCE_KEY)); // to persist the data or not
+
     // Would always be castable, guaranteed by the client
     ctxData.setServiceId(scope.getService(RuntimeService.class).serviceId());
     ctxData.setServiceUrl(scope.getService(RuntimeService.class).getUrl());
@@ -326,7 +329,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
     for(Map.Entry<String, Object> entry : params.entrySet()) {
       String key = entry.getKey();
       Object value = entry.getValue();
-      if (!(key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY))) {
+      if (!key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY) && !key.equals(KLAB_CONTEXTUALIZER_PERSISTENCE_KEY)) { // Since it's already set as the Adapter ID before
         if (value instanceof Number ) {
           ctxParams.put(key, ((Number) value).intValue());
         } else {

@@ -1,6 +1,6 @@
 from .commons import *
 from shapely import wkt
-from shapely.errors import WKTReadingError
+from shapely.errors import ShapelyError
 from shapely.geometry import Point, LineString, Polygon
 from typing import List, Union
 from .logging import logger
@@ -21,7 +21,7 @@ class Space(BaseModel):
                 geom = wkt.loads(shape)
                 logger.info("WKT String Validated Successfully")
 
-            except WKTReadingError:
+            except ShapelyError:
                 raise KlabNifiException("Invalid Geometry")
         else:
             try:

@@ -19,9 +19,13 @@ ctx = contextualizer.WCS(
 )
 
 stacCtx = contextualizer.STAC(
-    stacCollection="https://earth-search.aws.element84.com/v1/collections/sentinel-2-pre-c1-l2a", 
-    stacAsset="red"
+    persistent=True,
+    collection="https://earth-search.aws.element84.com/v1/collections/sentinel-2-pre-c1-l2a",
+    asset="red",
+    
 )
+
+#3stacCtx.serviceType = "a"
 
 
 
@@ -29,18 +33,18 @@ klabNifiObs = KlabObservationNifiRequest(
     ##space = space, 
     ##time = time,
     ##resetContext=True,
-    observationSemantics= "geography:Elevation",
+    observationSemantics= "geography:Slope",
     ##observationSemantics= "earth:Terrestrial earth:Region",
     ##asContext=True,
     ##observationName="am1729",
-    dtURL="https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.aem40971my",
-    ##contextualizer=stacCtx,
+    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.g9r69oqgr7",
+    contextualizer=ctx,
 )
 
 print (klabNifiObs.to_dict())
 
 print (klabNifiObs.to_json())
 
-nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
-nifiklabClient.submitObservation(klabNifiObs)
+##nifiklabClient = KlabNifiListenHTTPClient(port="3306", healthport="3307")
+##nifiklabClient.submitObservation(klabNifiObs)
 
