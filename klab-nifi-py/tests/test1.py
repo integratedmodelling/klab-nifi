@@ -19,7 +19,7 @@ ctx = contextualizer.WCS(
 )
 
 stacCtx = contextualizer.STAC(
-    persistent=True,
+    ##persistent=True,
     collection="https://earth-search.aws.element84.com/v1/collections/sentinel-2-pre-c1-l2a",
     asset="red",
     
@@ -28,15 +28,15 @@ stacCtx = contextualizer.STAC(
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    ##space = space, 
-    ##time = time,
+    space=space,
+    time = time,
     ##resetContext=True,
-    observationSemantics= "geography:Aspect",
-    ##observationSemantics= "earth:Terrestrial earth:Region",
-    ##asContext=True,
-    ##observationName="am1729",
-    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.gc1usfwodz",
-    contextualizer=stacCtx,
+    ##observationSemantics= "geography:Elevation",
+    observationSemantics= "earth:Terrestrial earth:Region",
+    asContext=True,
+    observationName="am1729",
+    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.i0iqi1uedz",
+    ##contextualizer=stacCtx,
 )
 
 print (klabNifiObs.to_dict())

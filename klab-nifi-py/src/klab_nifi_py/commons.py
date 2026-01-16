@@ -3,6 +3,8 @@ import json
 
 KLAB_GEO_PROJ = "EPSG:4326"
 KLAB_UNRESOLVED_OBS_ID = -1
+KLAB_SERVICETYPE_KEY = "serviceType"
+KLAB_DEFAULT_WCS_URL = "https://integratedmodelling.org/geoserver/ows"
 
 
 class BaseModel:
