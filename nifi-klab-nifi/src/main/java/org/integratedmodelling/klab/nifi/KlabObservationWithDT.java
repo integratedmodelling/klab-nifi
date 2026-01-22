@@ -4,12 +4,14 @@ import com.google.gson.*;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
+import org.integratedmodelling.klab.api.data.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -27,6 +29,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.collections.Parameters;
+import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
@@ -222,6 +225,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
                       .build();
 
       obs = DigitalTwin.createObservation(contextScope, observable, geometry.build(), req.get().getObservationName());
+      Metadata metadata = Metadata.create();
+      metadata.put(Metadata.IM_FEATURE_URN,"im:nifi." + req.get().getObservationName());
+      obs.setMetadata(metadata); // This is imp for context obs, the k.LAB Agent looks for this in KG, otherwise it just looks at the semantics
     } else {
       obs = DigitalTwin.createObservation(contextScope, observable);
     }
@@ -285,6 +291,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
                 + resolvedObservation.getId()
                 + " as the Context for future Observation(s)");
         ctxS = contextScope.within(resolvedObservation);
+
+        /*
+          If a Context Observation is made, while it's possible to
+          have a Context Observation to be a child of another Context Observation
+          We for now, are going to keep all the Context Observations as child of the root node
+         */
+
+        //klabController.removeScope(dtURL);
         klabController.addScope(dtURL, ctxS);
 
         contextScope.send(
