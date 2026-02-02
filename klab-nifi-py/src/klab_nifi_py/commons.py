@@ -1,5 +1,6 @@
 
 import json
+import logging
 
 KLAB_GEO_PROJ = "EPSG:4326"
 KLAB_UNRESOLVED_OBS_ID = -1

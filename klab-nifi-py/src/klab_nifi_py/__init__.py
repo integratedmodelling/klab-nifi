@@ -23,6 +23,7 @@ class KlabObservationNifiRequest(BaseModel):
     def __init__(self, 
                  observationName:str=None,
                  observationSemantics:str=None,
+                 observationNamespace:str=None,
                  asContext:bool=False,
                  resetContext:bool=False,
                  space:Space=None,
@@ -52,13 +53,19 @@ class KlabObservationNifiRequest(BaseModel):
             self.resetContext = True
             return
 
+        ## The Identity of a Substantial Observation i.e. Observations that can exist independently
+        ## necessarily need a Name, Namespace, and the ID is set as <Namespace>:<Name>
 
-        if not observationName and asContext:
-            raise KlabNifiException("Observation Name cannot be non null for Context Observations")
+        if (not observationName or not observationNamespace) and asContext:
+            raise KlabNifiException("Observation Name or Namespace is missing which is required for Context Observations")
         else:
             if observationName:
-                logger.info("Setting Name to the Observation")
+                logger.info("Setting Name to the Observation to " + observationName)
                 self.name = observationName
+
+        if observationNamespace:
+            logger.info("Setting Namespace to the Observation to " + observationNamespace)
+            self.namespace = observationNamespace
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")

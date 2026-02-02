@@ -1,9 +1,45 @@
 from pydantic.dataclasses import dataclass
 from dataclasses import field
 from .commons import BaseModel, KLAB_SERVICETYPE_KEY, KLAB_DEFAULT_WCS_URL
+from .logging import logger
+
+DEFAULT_RESOURCE_NAMESPACE = "im:nifi"
 
 
 @dataclass
+class PersistentResource(BaseModel):
+    '''
+    Persistent Resource for Contextualization
+
+    :param service: [Required] The Service which has the Resource first
+    :param catalog: [Required] The Catalog where the resource is to be located
+    :param id: [Required] Resource ID
+    :param namespace: [Optional, Default: "im:nifi"] Namespace for the Persistent Resource
+    :param mode: [Optional, Default: UPDATE] Persistent Resource Update Mode
+    '''
+
+    class ResourceUpdateMode():
+        '''
+        Persistent Resource Update Modes
+        Modes:
+            UPDATE: Update the existing Persistent Resource with new Contextualization
+            REPLACE: Replace the existing Persistent Resource with new Contextualization
+            MERGE: Merge the new Contextualization with existing Persistent Resource
+            ADD: Add new Contextualization as a new Persistent Resource
+        '''
+        UPDATE = "update"
+        REPLACE = "replace"
+        MERGE = "merge"
+        ADD = "add"
+
+    service: str ## The Resource Service that has the resource
+    catalog: str 
+    id: str
+    namespace: str = DEFAULT_RESOURCE_NAMESPACE
+    mode: str = ResourceUpdateMode.UPDATE #Default: Update
+
+
+@dataclass(kw_only=True)
 class Contextualizer(BaseModel):
     '''
     Base Contextualizer Class to be inherited all the Contextualizers
@@ -11,6 +47,7 @@ class Contextualizer(BaseModel):
     '''
     serviceType: str = field(init=False, default=None)
     persistent: bool = field(default=False, kw_only=True)
+    resource: PersistentResource = field(default=False, kw_only=True) ## Only if persistent is True
 
     def __setattr__(self, name, value):
         if name == KLAB_SERVICETYPE_KEY and hasattr(self, KLAB_SERVICETYPE_KEY):
@@ -18,7 +55,17 @@ class Contextualizer(BaseModel):
         super().__setattr__(name, value)
 
 
-@dataclass
+    def persistantConfigCheck(self):
+        '''
+        Checks the Configuration for Persistent Resources as marked to Persist by the User.
+        Raises ValueError if persistent is True but Persistent Resource Configuration is None.
+        '''
+        if self.persistent and self.resource is None:
+            raise ValueError("PersistentResource must be provided when the resource is set to Persist")
+        elif not self.persistent and self.resource is not None:
+            logger.warning("Persistent Resource Configuration Provided but not marked to Persist, The Configuration would be Ignored")
+
+@dataclass(kw_only=True)
 class WCS(Contextualizer):
 
     '''
@@ -35,13 +82,14 @@ class WCS(Contextualizer):
     band: int = 0 ## Handling Single Band by Default
     wcsVersion: str = "2.0.1" ## Default WCS Version
     serviceUrl: str = KLAB_DEFAULT_WCS_URL ## Referring to the IM GeoServer by default
+    resource: PersistentResource = None ## Only if persistent is True
 
     def __post_init__(self):
         object.__setattr__(self, KLAB_SERVICETYPE_KEY, "wcs")
+        self.persistantConfigCheck()
 
 
-
-@dataclass
+@dataclass(kw_only=True)
 class STAC(Contextualizer):
     '''
     STAC (SpatioTemporal Asset Catalog) contextualization
@@ -55,7 +103,12 @@ class STAC(Contextualizer):
     collection: str
     asset: str
     band: int = 0
+    resource: PersistentResource = None
 
     def __post_init__(self):
         object.__setattr__(self, KLAB_SERVICETYPE_KEY, "stac")
+        self.persistantConfigCheck()
+
+
+
 

@@ -2,7 +2,7 @@ from klab_nifi_py import *
 
 
 space = Space(
-    shape= "POLYGON ((4.785959977018684 52.36327282792627, 4.888466900960927 52.39865946645364, 4.919564507100708 52.37241513986268, 4.8996006118010955 52.3367728809811, 4.785959977018684 52.36327282792627))"
+    shape= "POLYGON ((77.11827805440052 28.583302839837145, 77.20532608330569 28.59787853608833, 77.19317984671426 28.55681256232853, 77.11827805440052 28.583302839837145))"
 )
 
 dt_2020 = datetime(2020, 1, 1, 0, 0, 0)
@@ -14,13 +14,22 @@ time = Time(
     tend = dt_2021
     )
 
+
+persistantResourceConfig = contextualizer.PersistentResource(
+    service="im.resources-main",
+    catalog ="staging",
+    id="dummy_aspect",
+)
+
 ctx = contextualizer.WCS(
     wcsIdentifier="im-data-global-geography__elevation-global-90m",
+    persistent=True,
+    resource=persistantResourceConfig
 )
 
 stacCtx = contextualizer.STAC(
     ##persistent=True,
-    collection="https://earth-search.aws.element84.com/v1/collections/sentinel-2-pre-c1-l2a",
+    collection="https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2",
     asset="red",
     
 )
@@ -28,14 +37,14 @@ stacCtx = contextualizer.STAC(
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    space=space,
-    time = time,
+    ##space = space,
+    ##time  = time,
     ##resetContext=True,
-    ##observationSemantics= "geography:Elevation",
-    observationSemantics= "earth:Terrestrial earth:Region",
-    asContext=True,
-    observationName="am1729",
-    dtURL="https://services.integratedmodelling.org/integration/runtime/main/dt/ESA_INSTITUTIONAL.i0iqi1uedz",
+    observationSemantics= "geography:Elevation",
+    ##observationSemantics= "earth:Terrestrial earth:Region",
+    ##asContext=True,
+    ##observationName="delhi_child",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.4z0iesnjcw",
     ##contextualizer=stacCtx,
 )
 
