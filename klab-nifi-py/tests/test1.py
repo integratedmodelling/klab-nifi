@@ -16,6 +16,7 @@ time = Time(
 
 
 persistantResourceConfig = contextualizer.PersistentResource(
+    namespace="nifi.internal.tests",
     service="im.resources-main",
     catalog ="staging",
     id="dummy_aspect",
@@ -23,7 +24,6 @@ persistantResourceConfig = contextualizer.PersistentResource(
 
 ctx = contextualizer.WCS(
     wcsIdentifier="im-data-global-geography__elevation-global-90m",
-    persistent=True,
     resource=persistantResourceConfig
 )
 
@@ -40,12 +40,13 @@ klabNifiObs = KlabObservationNifiRequest(
     ##space = space,
     ##time  = time,
     ##resetContext=True,
-    observationSemantics= "geography:Elevation",
+    observationSemantics= "geography:Slope",
     ##observationSemantics= "earth:Terrestrial earth:Region",
+    ##observationNamespace="nifi.internal.tests",
     ##asContext=True,
-    ##observationName="delhi_child",
-    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.4z0iesnjcw",
-    ##contextualizer=stacCtx,
+    observationName="am1729",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.8fpgdrsf4s",
+    contextualizer=ctx,
 )
 
 print (klabNifiObs.to_dict())
