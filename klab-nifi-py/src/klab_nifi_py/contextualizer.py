@@ -3,8 +3,6 @@ from dataclasses import field
 from .commons import BaseModel, KLAB_SERVICETYPE_KEY, KLAB_DEFAULT_WCS_URL
 from .logging import logger
 
-DEFAULT_RESOURCE_NAMESPACE = "im:nifi"
-
 
 @dataclass
 class PersistentResource(BaseModel):
@@ -35,7 +33,7 @@ class PersistentResource(BaseModel):
     service: str ## The Resource Service that has the resource
     catalog: str 
     id: str
-    namespace: str = DEFAULT_RESOURCE_NAMESPACE
+    namespace: str
     mode: str = ResourceUpdateMode.UPDATE #Default: Update
 
 
@@ -57,13 +55,17 @@ class Contextualizer(BaseModel):
 
     def persistantConfigCheck(self):
         '''
-        Checks the Configuration for Persistent Resources as marked to Persist by the User.
-        Raises ValueError if persistent is True but Persistent Resource Configuration is None.
+        If the Resource Configuration is provided, set the Persistent Flag to True
+        even if the User has not set the Persistent Flag to True or has set it to False
+        This is to ensure that the Contextualization is always Persistent if the Resource
         '''
-        if self.persistent and self.resource is None:
-            raise ValueError("PersistentResource must be provided when the resource is set to Persist")
-        elif not self.persistent and self.resource is not None:
-            logger.warning("Persistent Resource Configuration Provided but not marked to Persist, The Configuration would be Ignored")
+
+        if self.resource is not None:
+            logger.info("Setting Persistance basis the Resource Configuration Provided")
+            self.persistent = True
+        else:
+            logger.info("No Resource Configuration Provided, Setting Persistance to False")
+            self.persistent = False
 
 @dataclass(kw_only=True)
 class WCS(Contextualizer):

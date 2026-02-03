@@ -40,12 +40,12 @@ klabNifiObs = KlabObservationNifiRequest(
     ##space = space,
     ##time  = time,
     ##resetContext=True,
-    observationSemantics= "geography:Slope",
+    observationSemantics= "geography:Aspect",
     ##observationSemantics= "earth:Terrestrial earth:Region",
     ##observationNamespace="nifi.internal.tests",
     ##asContext=True,
-    observationName="am1729",
-    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.8fpgdrsf4s",
+    ##observationName="delhi",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.8itnxba3hm",
     contextualizer=ctx,
 )
 
