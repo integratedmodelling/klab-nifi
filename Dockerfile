@@ -31,5 +31,7 @@ FROM apache/nifi:2.4.0
 COPY --from=builder /build/nifi-klab-nifi-api-nar/target/nifi-klab-nifi-api-nar-1.0.0-SNAPSHOT.nar /opt/nifi/nifi-current/lib/
 COPY --from=builder /build/nifi-klab-nifi-nar/target/nifi-klab-nifi-nar-1.0.0-SNAPSHOT.nar /opt/nifi/nifi-current/lib/
 
-# Copy Python scripts into NiFi Python extensions
-COPY klab-nifi-py/src/klab_nifi_py /opt/nifi/nifi-current/python_extensions/klab_nifi_py
+# Copy Python scripts into NiFi Python extensions (matching docker-compose behavior)
+COPY klab-nifi-py/src/klab_nifi_py/ /opt/nifi/nifi-current/python_extensions/
+
+EXPOSE 8443 3306 3307
