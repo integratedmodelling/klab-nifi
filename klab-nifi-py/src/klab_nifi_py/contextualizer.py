@@ -16,7 +16,7 @@ class PersistentResource(BaseModel):
     :param mode: [Optional, Default: UPDATE] Persistent Resource Update Mode
     '''
 
-    class ResourceUpdateMode():
+    class ResourceUpdateMode:
         '''
         Persistent Resource Update Modes
         Modes:

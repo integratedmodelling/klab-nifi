@@ -8,6 +8,7 @@ import java.util.Date;
 import java.util.Map;
 
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.services.ResourcesService;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
 
@@ -19,6 +20,7 @@ import org.locationtech.jts.io.WKTReader;
 public class KlabObservationNifiRequest {
   private final Geometry geometry;
   private final String name;
+  private final String namespace;
   private final String semantics;
   private final String digitalTwin;
   private final boolean asContext;
@@ -29,6 +31,7 @@ public class KlabObservationNifiRequest {
   private KlabObservationNifiRequest(Builder builder) {
     this.geometry = builder.geometry;
     this.name = builder.name;
+    this.namespace = builder.namespace;
     this.semantics = builder.semantics;
     this.digitalTwin = builder.digitalTwin;
     this.id = builder.id;
@@ -46,6 +49,10 @@ public class KlabObservationNifiRequest {
   // getters
   public Geometry getGeometry() {
     return geometry;
+  }
+
+  public String getNamespace() {
+    return namespace;
   }
 
   public String getObservationName() {
@@ -78,6 +85,7 @@ public class KlabObservationNifiRequest {
     public boolean asContext;
     public boolean resetContext;
     public Map<String, Object> contextualizer;
+    public String namespace;
 
     public Builder setResetContext(boolean resetContext) {
       this.resetContext = resetContext;
@@ -100,6 +108,11 @@ public class KlabObservationNifiRequest {
 
     public Builder setObservationName(String name) {
       this.name = name;
+      return this;
+    }
+
+    public Builder setNamespace(String namespace) {
+      this.namespace = namespace;
       return this;
     }
 
@@ -325,5 +338,64 @@ public class KlabObservationNifiRequest {
       }
     }
   }
+
+  /*
+    This is the Resource Config for Persistant Resource, i.e. in the Contextualizer
+    if the Persist is False, it's ignored altogether
+   */
+  public static class PersistantResourceConfig {
+    public final String service;
+    public final String catalog;
+    public final String id;
+    public final String namespace;
+    public final  ResourcesService.SubmissionMode mode;
+
+    public PersistantResourceConfig(Builder builder) {
+      this.service = builder.service;
+      this.catalog = builder.catalog;
+      this.id = builder.id;
+      this.namespace = builder.namespace;
+      this.mode = builder.mode;
+    }
+
+    public static class Builder {
+      private String service;
+      private String catalog;
+      private String id;
+      private String namespace;
+      private ResourcesService.SubmissionMode mode;
+
+      public Builder setService(String service) {
+        this.service = service;
+        return this;
+      }
+
+      public Builder setCatalog(String catalog) {
+        this.catalog = catalog;
+        return this;
+      }
+
+      public Builder setId(String id) {
+        this.id = id;
+        return this;
+      }
+
+      public Builder setNamespace(String ns) {
+        this.namespace = ns;
+        return this;
+      }
+
+      public Builder setSubmissionMode(ResourcesService.SubmissionMode mode){
+        this.mode = mode;
+        return this;
+      }
+
+      public PersistantResourceConfig build() {
+        return new PersistantResourceConfig(this);
+      }
+    }
+  }
+
+
 
 }

@@ -2,16 +2,12 @@ package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URL;
-import org.integratedmodelling.klab.api.data.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -28,12 +24,11 @@ import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
-import org.integratedmodelling.klab.api.collections.Parameters;
-import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
+import org.integratedmodelling.klab.api.knowledge.Urn;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
@@ -44,8 +39,7 @@ import org.integratedmodelling.klab.api.services.RuntimeService;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_PERSISTENCE_KEY;
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_TYPE_KEY;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @InputRequirement(
@@ -224,10 +218,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
                       .resolution(Time.Resolution.Type.YEAR, req.get().getGeometry().getTime().getTscope())
                       .build();
 
-      obs = DigitalTwin.createObservation(contextScope, observable, geometry.build(), req.get().getObservationName());
-      Metadata metadata = Metadata.create();
-      metadata.put(Metadata.IM_FEATURE_URN,"im:nifi." + req.get().getObservationName());
-      obs.setMetadata(metadata); // This is imp for context obs, the k.LAB Agent looks for this in KG, otherwise it just looks at the semantics
+      var identity = Urn.of(req.get().getNamespace() + ":" + req.get().getObservationName()); // The Identity Problem
+      getLogger().info("Received URN: " + identity.getUrn());
+      obs = DigitalTwin.createObservation(contextScope, observable, identity, geometry.build(), req.get().getObservationName());
     } else {
       obs = DigitalTwin.createObservation(contextScope, observable);
     }
@@ -347,11 +340,17 @@ public class KlabObservationWithDT extends AbstractProcessor {
       if (!key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY) && !key.equals(KLAB_CONTEXTUALIZER_PERSISTENCE_KEY)) { // Since it's already set as the Adapter ID before
         if (value instanceof Number ) {
           ctxParams.put(key, ((Number) value).intValue());
+        } else if(key.equals(KLAB_CONTEXTUALIZER_RESOURCE_KEY)) {
+          if (!(value instanceof KlabObservationNifiRequest.PersistantResourceConfig)) {
+            ctxParams.put(key, value);
+          } else {
+            System.out.println("The Resource Key for the Contextualizer was found, but the resource configuration was malformed hence Ignored");
+          }
         } else {
           ctxParams.put(key, String.valueOf(value));
+          }
         }
       }
-    }
     ctxData.setParameters(ctxParams);
     return ctxData;
   }
