@@ -1,8 +1,11 @@
 from pydantic.dataclasses import dataclass
 from dataclasses import field
-from .commons import BaseModel, KLAB_SERVICETYPE_KEY, KLAB_DEFAULT_WCS_URL
+from .commons import BaseModel, KLAB_SERVICETYPE_KEY
 from .logging import logger
 
+
+IM_RESOURCES_SERVICE = "im.resources-main"
+IM_RESOURCES_WCS_URL = "https://integratedmodelling.org/geoserver/ows"
 
 @dataclass
 class PersistentResource(BaseModel):
@@ -30,10 +33,10 @@ class PersistentResource(BaseModel):
         MERGE = "merge"
         ADD = "add"
 
-    service: str ## The Resource Service that has the resource
-    catalog: str 
+    catalog: str
     id: str
     namespace: str
+    service: str = IM_RESOURCES_SERVICE ## The Resource Service that has the resource, Default: im.resources-main
     mode: str = ResourceUpdateMode.UPDATE #Default: Update
 
 
@@ -83,7 +86,7 @@ class WCS(Contextualizer):
     wcsIdentifier: str
     band: int = 0 ## Handling Single Band by Default
     wcsVersion: str = "2.0.1" ## Default WCS Version
-    serviceUrl: str = KLAB_DEFAULT_WCS_URL ## Referring to the IM GeoServer by default
+    serviceUrl: str = IM_RESOURCES_WCS_URL ## Referring to the IM GeoServer by default
     resource: PersistentResource = None ## Only if persistent is True
 
     def __post_init__(self):

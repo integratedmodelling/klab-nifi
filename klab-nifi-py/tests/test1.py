@@ -8,11 +8,19 @@ space = Space(
 dt_2020 = datetime(2020, 1, 1, 0, 0, 0)
 dt_2021 = datetime(2021, 12, 31, 23, 59, 59)
 
-
 time = Time(
     tstart=dt_2020,
     tend = dt_2021
     )
+
+
+klabContext = Context(
+    space=space,
+    time=time,
+    ctxObservationNamespace="nifi.internal.tests",
+    ctxObservationName="WB090101010"
+)
+
 
 
 persistantResourceConfig = contextualizer.PersistentResource(
@@ -33,9 +41,7 @@ ctx = contextualizer.WCS(
 
 stacCtx = contextualizer.STAC(
     collection="https://planetarycomputer.microsoft.com/api/stac/v1/collections/landsat-c2-l2",
-    asset="red",
-
-    
+    asset="blue",
 )
 
 
@@ -43,16 +49,10 @@ stacCtx = contextualizer.STAC(
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    space = space,
-    time  = time,
-    ##resetContext=True,
-    ##observationSemantics= "geography:Slope",
-    observationSemantics= "earth:Terrestrial earth:Region",
-    observationNamespace="nifi.internal.tests",
-    asContext=True,
-    observationName="WB",
-    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.rvr3s2juw0",
-    #contextualizer=ctx
+    #ctx= klabContext,
+    observationSemantics="geography:BathymetricDepth",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.warlt6kz2b",
+    contextualizer=stacCtx
 )
 
 print (klabNifiObs.to_dict())

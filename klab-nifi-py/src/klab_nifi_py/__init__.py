@@ -1,4 +1,4 @@
-from .geometry import *
+from .context import *
 from urllib.parse import urlparse
 from .contextualizer import Contextualizer
 from .logging import logger
@@ -21,13 +21,8 @@ class KlabObservationNifiRequest(BaseModel):
     '''
 
     def __init__(self, 
-                 observationName:str=None,
+                 ctx:Context = None,
                  observationSemantics:str=None,
-                 observationNamespace:str=None,
-                 asContext:bool=False,
-                 resetContext:bool=False,
-                 space:Space=None,
-                 time:Time=None,
                  dtURL:str=None,
                  contextualizer:Contextualizer=None,
                  loglevel:str=logging.INFO):
@@ -44,33 +39,23 @@ class KlabObservationNifiRequest(BaseModel):
             self.digitalTwin = dtURL
         else:
             raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
-
-        if resetContext and (space or time or contextualizer or asContext or observationName or observationSemantics):
-            raise KlabNifiException("Reset Context cannot be set along with other Observation Parameters")
-
-        if resetContext:
-            logger.info("Resetting Context for the Observation, Context Observation must be made prior to the future observations submitted")
-            self.resetContext = True
-            return
-
-        ## The Identity of a Substantial Observation i.e. Observations that can exist independently
-        ## necessarily need a Name, Namespace, and the ID is set as <Namespace>:<Name>
-
-        if (not observationName or not observationNamespace) and asContext:
-            raise KlabNifiException("Observation Name or Namespace is missing which is required for Context Observations")
-        else:
-            if observationName:
-                logger.info("Setting Name to the Observation to " + observationName)
-                self.name = observationName
-
-        if observationNamespace:
-            logger.info("Setting Namespace to the Observation to " + observationNamespace)
-            self.namespace = observationNamespace
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
+        
+        if ctx:
+            if observationSemantics != CONTEXT_OBSERVATION_SEMANTICS:
+                logger.info("A Context Observation would be first made, and the DT would then be queried for the actual observation")
+            else:
+                logger.info("Only Context Observation would be made")
+            self.context = ctx
+        else:
+            logger.info("No Context Set, the DT would be queried for the observation based on the previously set context")
 
         if contextualizer :
+            if observationSemantics == CONTEXT_OBSERVATION_SEMANTICS:
+                raise KlabNifiException("Contextualizer cannot be set for a Context Observation")
+            
             logger.info("Setting Contextualizer to the Observation")
             self.contextualizer = contextualizer
 
@@ -78,20 +63,6 @@ class KlabObservationNifiRequest(BaseModel):
         ##TODO: check how can we validate the semantics here without the Python Client
         ## Keeping it as it is for now
         self.semantics = observationSemantics 
-        self.asContext = asContext
-
-        if contextualizer and asContext:
-            raise KlabNifiException("Contextualizer cannot be set for Context Observations")
-
-        if self.asContext and (not space or not time or observationSemantics != CONTEXT_OBSERVATION_SEMANTICS) :
-            raise KlabNifiException("Context Observations must have both Space and Time defined, "
-            "and Semantics must be set to " + CONTEXT_OBSERVATION_SEMANTICS)
-
-        if space and time :
-            logger.debug("Setting Geometry")
-            self.geometry = Geometry(space, time)
-
-
         logger.info("Initial Validations Passed, Observation Payload Created")
 
 
