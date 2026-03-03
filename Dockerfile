@@ -34,4 +34,16 @@ COPY --from=builder /build/nifi-klab-nifi-nar/target/nifi-klab-nifi-nar-1.0.0-SN
 # Copy Python scripts into NiFi Python extensions (matching docker-compose behavior)
 COPY klab-nifi-py/src/klab_nifi_py/ /opt/nifi/nifi-current/python_extensions/
 
+# Create .klab directory for certificates
+RUN mkdir -p /home/nifi/.klab
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /opt/nifi/docker-entrypoint.sh
+
+USER root
+RUN chmod +x /opt/nifi/docker-entrypoint.sh
+USER nifi
+
 EXPOSE 8443 3306 3307
+
+ENTRYPOINT ["/opt/nifi/docker-entrypoint.sh"]
