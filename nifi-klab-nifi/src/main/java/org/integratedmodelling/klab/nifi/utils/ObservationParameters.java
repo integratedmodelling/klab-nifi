@@ -4,6 +4,7 @@ public interface ObservationParameters {
   String OBSERVATION_TIME_SCOPE = "time.scope";
   String DIGITAL_TWIN_URL_PROPERTY = "dt.url";
   String OBSERVATION_NAME = "name";
+  String OBSERVATION_NAMESPACE = "namespace";
   String OBSERVATION_SEMANTICS = "semantics";
   String OBSERVATION_ID = "id";
   String OBSERVATION_SPACE = "space";

@@ -8,6 +8,7 @@ import java.util.Date;
 import java.util.Map;
 
 import org.integratedmodelling.common.utils.Utils;
+import org.integratedmodelling.klab.api.services.ResourcesService;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
 
@@ -17,23 +18,17 @@ import org.locationtech.jts.io.WKTReader;
  * Flowfile using {@link KlabNifiListenHTTPClient}
  */
 public class KlabObservationNifiRequest {
-  private final Geometry geometry;
-  private final String name;
+  private final KlabContext context;
   private final String semantics;
   private final String digitalTwin;
-  private final boolean asContext;
-  private final boolean resetContext;
   private final Map<String, Object> contextualizer;
   private final long id;
 
   private KlabObservationNifiRequest(Builder builder) {
-    this.geometry = builder.geometry;
-    this.name = builder.name;
+    this.context = builder.context;
     this.semantics = builder.semantics;
     this.digitalTwin = builder.digitalTwin;
     this.id = builder.id;
-    this.asContext = builder.asContext;
-    this.resetContext = builder.resetContext;
     this.contextualizer = builder.contextualizer;
   }
 
@@ -44,20 +39,12 @@ public class KlabObservationNifiRequest {
   }
 
   // getters
-  public Geometry getGeometry() {
-    return geometry;
-  }
-
-  public String getObservationName() {
-    return name;
+  public KlabContext getContext() {
+    return context;
   }
 
   public String getObservationSemantics() {
     return semantics;
-  }
-
-  public long getObservationId() {
-    return id;
   }
 
   public Map<String, Object> getContextualizer() {
@@ -66,11 +53,8 @@ public class KlabObservationNifiRequest {
 
   public String getDigitalTwin() { return digitalTwin; }
 
-  public boolean getAsContext() { return asContext; }
-  public boolean getResetContext() {return resetContext; }
-
   public static class Builder {
-    private Geometry geometry;
+    private KlabContext context;
     private String name;
     private String semantics;
     private long id = KLAB_UNRESOLVED_OBS_ID;
@@ -78,30 +62,18 @@ public class KlabObservationNifiRequest {
     public boolean asContext;
     public boolean resetContext;
     public Map<String, Object> contextualizer;
-
-    public Builder setResetContext(boolean resetContext) {
-      this.resetContext = resetContext;
-      return this;
-    }
-    public Builder setAsContext(boolean asContext){
-      this.asContext = asContext;
-      return this;
-    }
+    public String namespace;
 
     public Builder setContextualizer(Map<String, Object> contextualizer) {
       this.contextualizer = contextualizer;
       return this;
     }
 
-    public Builder setGeometry(Geometry geometry) {
-      this.geometry = geometry;
+    public Builder setKlabContext(KlabContext ctx) {
+      this.context = ctx;
       return this;
     }
 
-    public Builder setObservationName(String name) {
-      this.name = name;
-      return this;
-    }
 
     public Builder setObservationSemantics(String semantics) {
       this.semantics = semantics;
@@ -136,14 +108,14 @@ public class KlabObservationNifiRequest {
     }
   }
 
-  public static class Geometry {
+  public static class KlabContext {
 
     public static class Space {
       private final String shape;
       private final String sgrid;
       private final String proj;
 
-      private Space(KlabObservationNifiRequest.Geometry.Space.Builder builder) {
+      private Space(KlabContext.Space.Builder builder) {
         this.shape = builder.proj + " " + builder.shape;
         this.sgrid = builder.sgrid;
         this.proj = builder.proj;
@@ -180,7 +152,7 @@ public class KlabObservationNifiRequest {
         private String sgrid = "1.km"; // default
         private String proj = "EPSG:4326"; // default
 
-        public KlabObservationNifiRequest.Geometry.Space.Builder setShape(String shape)
+        public KlabContext.Space.Builder setShape(String shape)
             throws KlabNifiException {
           if (!isValidWKT(shape)) {
             throw new KlabNifiException("Invalid WKT String");
@@ -189,7 +161,7 @@ public class KlabObservationNifiRequest {
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Space.Builder setShape(
+        public KlabContext.Space.Builder setShape(
             double minX, double minY, double maxX, double maxY) {
           this.shape =
               String.format(
@@ -198,21 +170,21 @@ public class KlabObservationNifiRequest {
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Space.Builder setGrid(String sgrid) {
+        public KlabContext.Space.Builder setGrid(String sgrid) {
           this.sgrid = sgrid;
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Space.Builder setProj(String proj) {
+        public KlabContext.Space.Builder setProj(String proj) {
           this.proj = proj;
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Space build() throws KlabNifiException {
+        public KlabContext.Space build() throws KlabNifiException {
           if (this.shape == null) {
             throw new KlabNifiException("Shape cannot be null");
           }
-          return new KlabObservationNifiRequest.Geometry.Space(this);
+          return new KlabContext.Space(this);
         }
       }
     }
@@ -223,7 +195,7 @@ public class KlabObservationNifiRequest {
       private final String tunit;
       private final int tscope;
 
-      private Time(KlabObservationNifiRequest.Geometry.Time.Builder builder) {
+      private Time(KlabContext.Time.Builder builder) {
         this.tstart = builder.tstart;
         this.tend = builder.tend;
         this.tunit = builder.tunit;
@@ -253,7 +225,7 @@ public class KlabObservationNifiRequest {
         private String tunit = "year"; // default
         private int tscope = 1; // default
 
-        public KlabObservationNifiRequest.Geometry.Time.Builder setTime(long start, long end)
+        public KlabContext.Time.Builder setTime(long start, long end)
             throws KlabNifiException {
           if (start > end) {
             throw new KlabNifiException("Start time can't be more than the end time");
@@ -263,7 +235,7 @@ public class KlabObservationNifiRequest {
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Time.Builder setTime(Date start, Date end)
+        public KlabContext.Time.Builder setTime(Date start, Date end)
             throws KlabNifiException {
           if (start.after(end)) {
             throw new KlabNifiException("Start time can't be more than the end time");
@@ -273,28 +245,32 @@ public class KlabObservationNifiRequest {
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Time.Builder setTunit(String tunit) {
+        public KlabContext.Time.Builder setTunit(String tunit) {
           this.tunit = tunit;
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Time.Builder setTscope(int tscope) {
+        public KlabContext.Time.Builder setTscope(int tscope) {
           this.tscope = tscope;
           return this;
         }
 
-        public KlabObservationNifiRequest.Geometry.Time build() {
-          return new KlabObservationNifiRequest.Geometry.Time(this);
+        public KlabContext.Time build() {
+          return new KlabContext.Time(this);
         }
       }
     }
 
     private final Space space;
     private final Time time;
+    private final String name;
+    private final String namespace;
 
-    private Geometry(Builder builder) {
+    private KlabContext(Builder builder) {
       this.space = builder.space;
       this.time = builder.time;
+      this.namespace = builder.namespace;
+      this.name = builder.name;
     }
 
     /** Getters */
@@ -306,9 +282,14 @@ public class KlabObservationNifiRequest {
       return time;
     }
 
+    public String getNamespace() {return namespace;}
+    public String getName() {return name;}
+
     public static class Builder {
       private Space space;
       private Time time;
+      private String name;
+      private String namespace;
 
       public Builder setSpace(Space space) {
         this.space = space;
@@ -320,10 +301,79 @@ public class KlabObservationNifiRequest {
         return this;
       }
 
-      public Geometry build() {
-        return new Geometry(this);
+      public Builder setName(String name) {
+        this.name = name;
+        return this;
+      }
+
+      public Builder setNamespace(String namespace) {
+        this.namespace = namespace;
+        return this;
+      }
+
+      public KlabContext build() {
+        return new KlabContext(this);
       }
     }
   }
+
+  /*
+    This is the Resource Config for Persistant Resource, i.e. in the Contextualizer
+    if the Persist is False, it's ignored altogether
+   */
+  public static class PersistantResourceConfig {
+    public final String service;
+    public final String catalog;
+    public final String id;
+    public final String namespace;
+    public final  ResourcesService.SubmissionMode mode;
+
+    public PersistantResourceConfig(Builder builder) {
+      this.service = builder.service;
+      this.catalog = builder.catalog;
+      this.id = builder.id;
+      this.namespace = builder.namespace;
+      this.mode = builder.mode;
+    }
+
+    public static class Builder {
+      private String service;
+      private String catalog;
+      private String id;
+      private String namespace;
+      private ResourcesService.SubmissionMode mode;
+
+      public Builder setService(String service) {
+        this.service = service;
+        return this;
+      }
+
+      public Builder setCatalog(String catalog) {
+        this.catalog = catalog;
+        return this;
+      }
+
+      public Builder setId(String id) {
+        this.id = id;
+        return this;
+      }
+
+      public Builder setNamespace(String ns) {
+        this.namespace = ns;
+        return this;
+      }
+
+      public Builder setSubmissionMode(ResourcesService.SubmissionMode mode){
+        this.mode = mode;
+        return this;
+      }
+
+      public PersistantResourceConfig build() {
+        return new PersistantResourceConfig(this);
+      }
+    }
+  }
+
+
 
 }

@@ -2,16 +2,13 @@ package org.integratedmodelling.klab.nifi;
 
 import com.google.gson.*;
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URL;
-import org.integratedmodelling.klab.api.data.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -28,24 +25,23 @@ import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
-import org.integratedmodelling.klab.api.collections.Parameters;
-import org.integratedmodelling.klab.api.collections.impl.MetadataImpl;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
+import org.integratedmodelling.klab.api.knowledge.Urn;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
+import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
 import org.integratedmodelling.klab.api.services.RuntimeService;
 import org.integratedmodelling.klab.api.services.runtime.Message;
 import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_PERSISTENCE_KEY;
-import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_CONTEXTUALIZER_TYPE_KEY;
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @InputRequirement(
@@ -171,13 +167,6 @@ public class KlabObservationWithDT extends AbstractProcessor {
       return;
     }
 
-    if (req.get().getResetContext()) {
-      getLogger().info("Resetting the Context, another Context Observation would be required to be made");
-      klabController.removeScope(dtURL);
-      session.transfer(flowfile, REL_SUCCESS);
-      return;
-    }
-
     ContextScope contextScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
     if (contextScope == null) {
       getLogger().info("No ContextScope available from the KlabController for the DT " + dtURL);
@@ -204,114 +193,114 @@ public class KlabObservationWithDT extends AbstractProcessor {
     System.out.println("Observable Generated..");
 
     ObservationImpl obs = null;
-
-    if (req.get().getAsContext()) {
-      /*
-        Setting Name and Geometry (Time & Space) when it's a context observation,
-        else just pass the semantics
-       */
-      var geometry =
-              GeometryImpl.builder()
-                      .space()
-                      .shape(req.get().getGeometry().getSpace().getShape())
-                      .resolution(req.get().getGeometry().getSpace().getSgrid())
-                      .projection(req.get().getGeometry().getSpace().getProj())
-                      .build()
-                      .time()
-                      .between(
-                              req.get().getGeometry().getTime().getTstart(),
-                              req.get().getGeometry().getTime().getTend())
-                      .resolution(Time.Resolution.Type.YEAR, req.get().getGeometry().getTime().getTscope())
-                      .build();
-
-      obs = DigitalTwin.createObservation(contextScope, observable, geometry.build(), req.get().getObservationName());
-      Metadata metadata = Metadata.create();
-      metadata.put(Metadata.IM_FEATURE_URN,"im:nifi." + req.get().getObservationName());
-      obs.setMetadata(metadata); // This is imp for context obs, the k.LAB Agent looks for this in KG, otherwise it just looks at the semantics
-    } else {
-      obs = DigitalTwin.createObservation(contextScope, observable);
-    }
-
-
-    ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
-            contextScope,
-            req.get().getContextualizer());
-
-    if (!req.get().getAsContext() && ctxData != null) { // Only if the requests is not for a context observation AND consists of Contextualizer Data
-      obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
-    }
-
-    obs.setId(Observation.UNASSIGNED_ID);
-    getLogger().info("Observation Payload Generation done, submitting the Observation");
-
-    // Convert the object to a pretty-printed JSON string
-    System.out.println(prettyGson.toJson(obs));
-
-    AtomicReference<ObservationImpl> observationRef = new AtomicReference<>();
-    observationRef.set(obs);
-    Observation observation = observationRef.get();
+    Observation resolvedObs = null;
     FlowFile successFlowFile = session.create();
-
     try {
-      CompletableFuture<Observation> future = contextScope.submit(observation);
-      Observation resolvedObservation = future.get();
-      Map<String, String> attributes = new HashMap<>();
-      attributes.put("observation.id", resolvedObservation.getId() + "");
-      attributes.put("observation.type", resolvedObservation.getType().toString());
-      attributes.put("observation.urn", resolvedObservation.getUrn());
-      attributes.put("digital.twin.url", dtURL);
-
-      System.out.println("Observation ID: " + resolvedObservation.getId() + "\n"
-              + "Observation Name: " + resolvedObservation.getName() + "\n"
-              + resolvedObservation.getObservable() + "\n"
-              + "Observation URN: " + resolvedObservation.getUrn() + "\n"
-              + "Observation Type: " + resolvedObservation.getType().toString());
-
-      System.out.println(prettyGson.toJson(resolvedObservation));
-
-      // If the ID is -1, the Resolution Process failed
-      if (resolvedObservation.getId() == -1) {
-        getLogger().info("The submitted Observation couldn't be resolved");
-        contextScope.send(
-                Message.MessageClass.DigitalTwin,
-                Message.MessageType.Error,
-                resolvedObservation);
-        throw new Exception("The Submitted Observation couldn't be resolved");
-      }
-      /*
-        If asContext parameter has been set, and the observation submitted has
-        a Semantics of earth:Terrestrial earth:Region and should
-         have a time and space (Validated in the client)
-        then the context observation would be marked as context, and
-        the future observations would be made in that context
-      */
-      ContextScope ctxS = null;
-      if (req.get().getAsContext()){
-        getLogger().info("Setting the Context Observation with id: "
-                + resolvedObservation.getId()
-                + " as the Context for future Observation(s)");
-        ctxS = contextScope.within(resolvedObservation);
-
+      if (req.get().getContext() != null) {
         /*
-          If a Context Observation is made, while it's possible to
-          have a Context Observation to be a child of another Context Observation
-          We for now, are going to keep all the Context Observations as child of the root node
+          If Context is set in the Request, first try to Resolve the ContextObservation
+
+          If asContext parameter has been set, and the observation submitted has
+          a Semantics of earth:Terrestrial earth:Region and should
+           have a time and space (Validated in the client)
+          then the context observation would be marked as context, and
+          the future observations would be made in that context
+
          */
+        Observable ctxObservable = null;
 
-        //klabController.removeScope(dtURL);
-        klabController.addScope(dtURL, ctxS);
+        if (req.get().getObservationSemantics().equals(KLAB_CONTEXT_OBSERVATION_SEMANTICS)) {
+          ctxObservable = observable;
+        } else {
+          ctxObservable =
+                  contextScope
+                          .getService(Reasoner.class)
+                          .resolveObservable(KLAB_CONTEXT_OBSERVATION_SEMANTICS);
+        }
 
-        contextScope.send(
-                Message.MessageClass.DigitalTwin,
-                Message.MessageType.ContextObservationResolved,
-                resolvedObservation);
+        var geometry =
+                GeometryImpl.builder()
+                        .space()
+                        .shape(req.get().getContext().getSpace().getShape())
+                        .resolution(req.get().getContext().getSpace().getSgrid())
+                        .projection(req.get().getContext().getSpace().getProj())
+                        .build()
+                        .time()
+                        .between(
+                                req.get().getContext().getTime().getTstart(),
+                                req.get().getContext().getTime().getTend())
+                        .resolution(Time.Resolution.Type.YEAR, req.get().getContext().getTime().getTscope())
+                        .build();
+
+        var identity = Urn.of(req.get().getContext().getNamespace() + ":" + req.get().getContext().getName()); // The Identity Problem
+        getLogger().info("Received URN: " + identity.getUrn());
+        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName());
+        getLogger().info("Submitting the Context to the Digital Twin");
+        resolvedObs = submitObservation(contextScope, obs);
+        if (resolvedObs == null) {
+          getLogger().error("Context Submission unsuccessful to the Digital Twin");
+          throw new Exception("Context Submission to DT: " + dtURL + "was Unsuccessful");
+        } else {
+          System.out.println(prettyGson.toJson(resolvedObs));
+          ContextScope ctxS = contextScope.within(resolvedObs);
+          klabController.addScope(dtURL, ctxS);
+          contextScope.send(
+                  Message.MessageClass.DigitalTwin,
+                  Message.MessageType.ContextObservationResolved,
+                  resolvedObs);
+          getLogger().info("Context Observation was reolved successfully, the URN: " + resolvedObs.getUrn());
+        }
       }
+
+      /*
+      After the Context Observation was made, proceed to submit any other observation
+      requested by the user, submitted via the Nifi Workflow
+       */
+      if(!req.get().getObservationSemantics().equals(KLAB_CONTEXT_OBSERVATION_SEMANTICS)) {
+        ContextScope ctxS = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
+        obs = DigitalTwin.createObservation(ctxS, observable);
+        ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
+                ctxS,
+                req.get().getContextualizer());
+        if (ctxData != null) {
+          obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
+        }
+        obs.setId(Observation.UNASSIGNED_ID);
+        getLogger().info("Observation Payload Generation done, submitting the Observation");
+        resolvedObs = submitObservation(ctxS, obs);
+      }
+
+    System.out.println(prettyGson.toJson(obs));       // Convert the object to a pretty-printed JSON string
+
+    Map<String, String> attributes = new HashMap<>();
+    attributes.put("observation.id", resolvedObs.getId() + "");
+    attributes.put("observation.type", resolvedObs.getType().toString());
+    attributes.put("observation.urn", resolvedObs.getUrn());
+    attributes.put("digital.twin.url", dtURL);
+
+    System.out.println("Observation ID: " + resolvedObs.getId() + "\n"
+            + "Observation Name: " + resolvedObs.getName() + "\n"
+            + resolvedObs.getObservable() + "\n"
+            + "Observation URN: " + resolvedObs.getUrn() + "\n"
+            + "Observation Type: " + resolvedObs.getType().toString());
+
+    System.out.println(prettyGson.toJson(resolvedObs));
+
+    // If the ID is -1, the Resolution Process failed
+    if (resolvedObs.getId() == -1) {
+      getLogger().info("The submitted Observation couldn't be resolved");
+      contextScope.send(
+              Message.MessageClass.DigitalTwin,
+              Message.MessageType.Error,
+              resolvedObs);
+      throw new Exception("The Submitted Observation couldn't be resolved");
+    }
 
       getLogger().info("Sending Messages of Observation Submission Finished for the Digital Twin..");
       contextScope.send(
               Message.MessageClass.DigitalTwin,
               Message.MessageType.ObservationSubmissionFinished,
-              resolvedObservation
+              resolvedObs
       );
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
       ContextScope ctxScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
@@ -326,6 +315,19 @@ public class KlabObservationWithDT extends AbstractProcessor {
     }
   }
 
+
+  /*
+  Queries the DT with the Unresolved Observation, and the Observation then gets resolved by
+  the DT as resolvedObservation
+   */
+  private Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
+          throws Exception {
+
+    Observation resolvedObservation = null;
+    CompletableFuture<Observation> future = contextScope.submit(unresolvedObs);
+    resolvedObservation = future.get();
+    return resolvedObservation;
+  }
 
   private static ObservationImpl.ContextualizationDataImpl getContextualizationData(ContextScope scope, Map<String, Object> params) {
 
@@ -347,11 +349,17 @@ public class KlabObservationWithDT extends AbstractProcessor {
       if (!key.equals(KLAB_CONTEXTUALIZER_TYPE_KEY) && !key.equals(KLAB_CONTEXTUALIZER_PERSISTENCE_KEY)) { // Since it's already set as the Adapter ID before
         if (value instanceof Number ) {
           ctxParams.put(key, ((Number) value).intValue());
+        } else if(key.equals(KLAB_CONTEXTUALIZER_RESOURCE_KEY)) {
+          if (!(value instanceof KlabObservationNifiRequest.PersistantResourceConfig)) {
+            ctxParams.put(key, value);
+          } else {
+            System.out.println("The Resource Key for the Contextualizer was found, but the resource configuration was malformed hence Ignored");
+          }
         } else {
           ctxParams.put(key, String.valueOf(value));
+          }
         }
       }
-    }
     ctxData.setParameters(ctxParams);
     return ctxData;
   }

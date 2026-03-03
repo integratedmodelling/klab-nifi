@@ -45,6 +45,15 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
                     .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
                     .build();
 
+    public static final PropertyDescriptor OBSERVATION_NAMESPACE =
+            new PropertyDescriptor.Builder()
+                    .name(ObservationParameters.OBSERVATION_NAMESPACE)
+                    .displayName("Name of the observation context.")
+                    .description("The namespace of the context observation, NEEDED if observing a context, not for quality observations and all.")
+                    .required(false)
+                    .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                    .build();
+
     public static final PropertyDescriptor OBSERVATION_SEMANTICS =
             new PropertyDescriptor.Builder()
                     .name(ObservationParameters.OBSERVATION_SEMANTICS)
@@ -251,7 +260,7 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
         String grid = context.getProperty(OBSERVATION_GRID_SIZE).getValue();
 
         var space =
-                new KlabObservationNifiRequest.Geometry.Space.Builder()
+                new KlabObservationNifiRequest.KlabContext.Space.Builder()
                         .setProj(projection)
                         .setShape(geometryWkt)
                         .setGrid(grid)
@@ -262,27 +271,32 @@ public class KlabObservationRequestGenerator extends AbstractProcessor {
         long tEnd = readTEnd(context, session);
         String tUnit = context.getProperty(OBSERVATION_TIME_UNIT).getValue();
 
-        KlabObservationNifiRequest.Geometry.Time time =
-                new KlabObservationNifiRequest.Geometry.Time.Builder()
+        KlabObservationNifiRequest.KlabContext.Time time =
+                new KlabObservationNifiRequest.KlabContext.Time.Builder()
                         .setTime(tStart, tEnd)
                         .setTscope(1)
                         .setTunit(tUnit)
                         .build();
 
-        KlabObservationNifiRequest.Geometry geometry =
-                new KlabObservationNifiRequest.Geometry.Builder().setSpace(space).setTime(time).build();
-
-        String name =
+        String ctxName =
                 context.getProperty(OBSERVATION_NAME).getValue() == null
                         || context.getProperty(OBSERVATION_NAME).getValue().isBlank()
                         ? "testing-" + System.currentTimeMillis()
                         : context.getProperty(OBSERVATION_NAME).getValue();
 
+        String ctxNamespace =
+                context.getProperty(OBSERVATION_NAMESPACE).getValue() == null
+                        || context.getProperty(OBSERVATION_NAMESPACE).getValue().isBlank()
+                        ? "testing-" + System.currentTimeMillis()
+                        : context.getProperty(OBSERVATION_NAMESPACE).getValue();
+
+        KlabObservationNifiRequest.KlabContext klabCtx =
+                new KlabObservationNifiRequest.KlabContext.Builder().setSpace(space).
+                        setTime(time).setName(ctxName).setNamespace(ctxNamespace).build();
+
         // If setting asContext true, i.e. it needs a name and the geometry i.e. time and all
         requestBuilder = requestBuilder
-                .setAsContext(true)
-                .setObservationName(name)
-                .setGeometry(geometry);
+                .setKlabContext(klabCtx);
 
         return requestBuilder;
     }
