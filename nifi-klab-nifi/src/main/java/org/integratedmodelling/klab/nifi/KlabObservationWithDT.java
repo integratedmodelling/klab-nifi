@@ -270,7 +270,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
         resolvedObs = submitObservation(ctxS, obs);
       }
 
-    System.out.println(prettyGson.toJson(obs));       // Convert the object to a pretty-printed JSON string
+    System.out.println(prettyGson.toJson(resolvedObs));       // Convert the object to a pretty-printed JSON string
 
     Map<String, String> attributes = new HashMap<>();
     attributes.put("observation.id", resolvedObs.getId() + "");
@@ -329,6 +329,9 @@ public class KlabObservationWithDT extends AbstractProcessor {
     return resolvedObservation;
   }
 
+  /*
+  Gets Contextualization Information from the Flowfile
+   */
   private static ObservationImpl.ContextualizationDataImpl getContextualizationData(ContextScope scope, Map<String, Object> params) {
 
     if (params == null) {
