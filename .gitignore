@@ -5,3 +5,7 @@ custom-nars
 *.egg-info
 **/__pycache__
 docker-compose.yml
+**/dist
+examples
+nifi_input
+nifi_output

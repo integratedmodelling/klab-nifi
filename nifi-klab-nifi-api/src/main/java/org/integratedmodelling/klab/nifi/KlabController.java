@@ -16,13 +16,12 @@
  */
 package org.integratedmodelling.klab.nifi;
 
+import java.util.function.Consumer;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.controller.ControllerService;
+import org.integratedmodelling.klab.api.exceptions.KlabAuthorizationException;
 import org.integratedmodelling.klab.api.scope.Scope;
-
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 @Tags({"k.LAB", "Semantic Web"})
 @CapabilityDescription("k.LAB Service API.")
@@ -35,13 +34,16 @@ public interface KlabController extends ControllerService {
    * @return the scope requested. A scope appropriate for the request will be created if not
    *     configured in advance.
    */
-  Scope getScope(Class<? extends Scope> scopeClass);
 
   Scope getScope(String dtURL, Class<? extends Scope> scopeClass);
+
+  void removeScope(String dtURL);
+
+  Scope getScope(Class<? extends Scope> scopeClass);
+
+  void addScope(String dtURL, Scope scope) throws KlabAuthorizationException;
 
   void addEventListener(Consumer<EventData> listener);
 
   void removeEventListener(Consumer<EventData> listener);
-
-  void addScope(String dtURL, Scope scope);
 }

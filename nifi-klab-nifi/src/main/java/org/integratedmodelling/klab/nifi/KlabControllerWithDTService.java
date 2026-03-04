@@ -18,14 +18,14 @@ package org.integratedmodelling.klab.nifi;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
+
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
+import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
@@ -35,13 +35,13 @@ import org.integratedmodelling.common.authentication.KlabCertificateImpl;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
+import org.integratedmodelling.klab.api.exceptions.KlabAuthorizationException;
 import org.integratedmodelling.klab.api.identities.Federation;
 import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.KlabService;
 import org.integratedmodelling.klab.api.services.runtime.Channel;
 import org.integratedmodelling.klab.api.services.runtime.Message;
-import org.integratedmodelling.klab.api.utils.Utils;
 
 /**
  * The <code>KlabControllerService</code> is required by all k.LAB processors and is responsible for
@@ -53,46 +53,41 @@ import org.integratedmodelling.klab.api.utils.Utils;
  * on configuration and translates events from the scope into NiFi-consumable {@link
  * org.apache.nifi.flowfile.FlowFile}s, which other processors can consume.
  */
-public class KlabControllerService extends AbstractControllerService implements KlabController {
+public class KlabControllerWithDTService extends AbstractControllerService implements KlabController {
 
   public static final PropertyDescriptor CERTIFICATE_PROPERTY =
-      new PropertyDescriptor.Builder()
-          .name("Certificate")
-          .displayName("k.LAB Certificate")
-          .description("The URL for the k.LAB certificate to use for authentication")
-          .required(false)
-          .addValidator(StandardValidators.URL_VALIDATOR)
-          .build();
-
-  public static final PropertyDescriptor DIGITAL_TWIN_URL_PROPERTY =
-      new PropertyDescriptor.Builder()
-          .name("URL")
-          .displayName("Digital Twin URL")
-          .description("The URL for the digital twin to connect to")
-          .required(false)
-          .addValidator(StandardValidators.URL_VALIDATOR)
-          .build();
+          new PropertyDescriptor.Builder()
+                  .name("Certificate")
+                  .displayName("k.LAB Certificate")
+                  .description("The URL for the k.LAB certificate to use for authentication")
+                  .required(false)
+                  .addValidator(StandardValidators.URL_VALIDATOR)
+                  .build();
 
   public static final PropertyDescriptor DEFAULT_QUEUES =
-      new PropertyDescriptor.Builder()
-          .name("default-queues")
-          .displayName("Default queues")
-          .description(
-              "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
-                  + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
-          .required(false)
-              //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-          .build();
+          new PropertyDescriptor.Builder()
+                  .name("default-queues")
+                  .displayName("Default queues")
+                  .description(
+                          "A comma-separated list of queue types that will provide a default for the connected scopes unless otherwise specified."
+                                  + "Values must be one or more of Events, Errors, Status, Info, Warning, Debug, UI. The default is Events, Errors, Status.")
+                  .required(false)
+                  //.addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+                  .build();
 
   private static final List<PropertyDescriptor> properties =
-      List.of(CERTIFICATE_PROPERTY, DIGITAL_TWIN_URL_PROPERTY, DEFAULT_QUEUES);
+          List.of(CERTIFICATE_PROPERTY, DEFAULT_QUEUES);
 
   private Engine engine;
+  private Map<String, Scope> scopeMap;
   private UserScope userScope;
   private Scope configuredScope;
   private Federation federation;
+  private String certificatePath;
+  private final BlockingQueue<EventData> eventQueue = new LinkedBlockingQueue<>();
+
   private Set<Message.Queue> queues =
-      EnumSet.of(Message.Queue.Events, Message.Queue.Errors, Message.Queue.Status);
+          EnumSet.of(Message.Queue.Events,Message.Queue.Errors, Message.Queue.Status);
 
   @Override
   protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -107,76 +102,59 @@ public class KlabControllerService extends AbstractControllerService implements 
     // TODO update and log what needed
   }
 
-  @Override
-  public Scope getScope(Class<? extends Scope> scopeClass) {
-    // TODO check if scope is configured for this user. If not, a default session scope and context
-    //  scope can be created when the correspondent classes are requested.
-    return this.configuredScope;
-  }
-
   // Add listener management
   private final Set<Consumer<EventData>> eventListeners = ConcurrentHashMap.newKeySet();
   private final ExecutorService eventExecutor = Executors.newCachedThreadPool();
 
+  @OnEnabled
   public void onEnabled(final ConfigurationContext context)
-      throws InitializationException, URISyntaxException {
-    // ... existing code ...
+          throws InitializationException, URISyntaxException {
     this.engine = new EngineImpl(this::updateEngineStatus, this::updateServiceStatus);
+    this.scopeMap = new ConcurrentHashMap<>();
+    this.certificatePath = context.getProperty(CERTIFICATE_PROPERTY).getValue();
 
-    var certificateProperty = context.getProperty(CERTIFICATE_PROPERTY).getValue();
-    final boolean useDefaultPath = certificateProperty == null || certificateProperty.isBlank();
+    final boolean useDefaultPath = this.certificatePath == null || this.certificatePath.isBlank();
     if (useDefaultPath) {
+      getLogger().debug("Using default certificate path");
       this.userScope = engine.authenticate();
+      getLogger().debug("User scope: " + this.userScope);
     } else {
+      getLogger().debug("Using certificate path: " + this.certificatePath);
 
-      var certificateUri = new URI(certificateProperty);
+      var certificateUri = new URI(this.certificatePath);
+      var exists = Files.exists(Paths.get(certificateUri));
+
       var certificateFile = Paths.get(certificateUri).toAbsolutePath().toFile();
       if (!certificateFile.exists()) {
-        throw new InitializationException("Cannot find a certificate at: " + certificateProperty);
+        throw new InitializationException("Cannot find a certificate at: " + this.certificatePath);
       }
       var certificate = KlabCertificateImpl.createFromFile(certificateFile);
       if (!certificate.isValid()) {
         throw new InitializationException(
-            "Certificate is not valid: " + certificate.getInvalidityCause());
+                "Certificate is not valid: " + certificate.getInvalidityCause());
       }
       this.userScope = engine.authenticate(certificate);
     }
 
     if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
       throw new InitializationException(
-          "Unable to authenticate to k.LAB. Authentication is required for operation.");
+              "Unable to authenticate to k.LAB. Authentication is required for operation.");
     }
     this.federation =
             this.userScope == null
-            ? null
-            : Klab.INSTANCE.getFederationData(this.userScope.getUser());
+                    ? null
+                    : Klab.INSTANCE.getFederationData(this.userScope.getUser());
     if (federation == null) {
       getLogger()
-          .warn(
-              "User {} is not federated: messaging features disabled.",
-              userScope.getUser().getUsername());
+              .warn(
+                      "User {} is not federated: messaging features disabled.",
+                      userScope.getUser().getUsername());
     }
     this.engine.boot();
     this.configuredScope = this.userScope;
 
-    /*
-     * Connect to a digital twin if one is specified. The default behavior is to create the DT if not existing.
-     * TODO also enable full parametric definition with the DT's configuration
-     */
-    String dtUrl = context.getProperty(DIGITAL_TWIN_URL_PROPERTY).getValue();
-    getLogger().info("DT URL: " + dtUrl);
-    if (dtUrl != null && !dtUrl.isEmpty() && this.userScope != null) {
-      this.configuredScope = this.userScope.connect(Utils.URLs.newURL(dtUrl));
-    }
-
-    // TODO install overall message router as a listener for errors or other loggable conditions
-
-    // Set up a message listener for the configured scope
-    if (this.configuredScope != null) {
-      setupMessageListener();
-    }
-
-    getLogger().info("Controller Enabled Successfully, connecting to DT URL: " + dtUrl);
+    // Register as listener with the controller service
+    addEventListener(this::handleEvent);
   }
 
   @OnDisabled
@@ -190,6 +168,15 @@ public class KlabControllerService extends AbstractControllerService implements 
     } catch (InterruptedException e) {
       eventExecutor.shutdownNow();
       Thread.currentThread().interrupt();
+    }
+  }
+
+  private void handleEvent(EventData eventData) {
+    try {
+      eventQueue.offer(eventData, 1, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      getLogger().warn("Interrupted while queuing event");
     }
   }
 
@@ -215,15 +202,15 @@ public class KlabControllerService extends AbstractControllerService implements 
 
     // Notify all registered listeners asynchronously
     eventListeners.forEach(
-        listener ->
-            eventExecutor.submit(
-                () -> {
-                  try {
-                    listener.accept(eventData);
-                  } catch (Exception e) {
-                    getLogger().error("Error notifying event listener", e);
-                  }
-                }));
+            listener ->
+                    eventExecutor.submit(
+                            () -> {
+                              try {
+                                listener.accept(eventData);
+                              } catch (Exception e) {
+                                getLogger().error("Error notifying event listener", e);
+                              }
+                            }));
   }
 
   private EventData convertMessageToEventData(Message message) {
@@ -240,13 +227,25 @@ public class KlabControllerService extends AbstractControllerService implements 
 
   @Override
   public Scope getScope(String dtURL, Class<? extends Scope> scopeClass) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'getScope'");
+    return this.scopeMap.get(dtURL);
   }
 
   @Override
-  public void addScope(String dtURL, Scope scope) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'addScope'");
+  public void removeScope(String dtURL) {
+    this.scopeMap.remove(dtURL);
+  }
+
+  @Override
+  public Scope getScope(Class<? extends Scope> scopeClass) {
+    // TODO check if scope is configured for this user. If not, a default session scope and context
+    //  scope can be created when the correspondent classes are requested.
+    return this.userScope;
+  }
+
+  @Override
+  public void addScope(String dtURL, Scope scope) throws KlabAuthorizationException {
+    // A method to add a scope to a DT URL, ALWAYS would update the Scope
+    // corresponding to a DT URL, and add one if not existing from before
+    this.scopeMap.put(dtURL, scope);
   }
 }

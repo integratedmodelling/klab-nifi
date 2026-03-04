@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 @InputRequirement(InputRequirement.Requirement.INPUT_FORBIDDEN)
 public class MessageRelayProcessor extends AbstractProcessor {
 
-    // TODO this must be bound manually. See below for automated strategy. Not sure which is the best way.
+  // TODO this must be bound manually. See below for automated strategy. Not sure which is the best way.
   //  public static final PropertyDescriptor KLAB_CONTROLLER_SERVICE =
   //      new PropertyDescriptor.Builder()
   //          .name("klab-controller-service")
@@ -80,7 +80,7 @@ public class MessageRelayProcessor extends AbstractProcessor {
 
     // see below
     var controllerService =
-        (KlabControllerService)
+        (KlabController)
             context.getControllerServiceLookup().getControllerService("klab-controller-service");
 
     isRunning = true;
@@ -98,8 +98,8 @@ public class MessageRelayProcessor extends AbstractProcessor {
 
     // this is way uglier but works. Can be done by finding the identifiers by class first. TODO check for null
     var controllerService =
-        (KlabControllerService)
-            context.getControllerServiceLookup().getControllerService("klab-controller-service");
+        (KlabController)
+            context.getControllerServiceLookup().getControllerService("KlabControllerWithDTService");
     // Unregister listener
     controllerService.removeEventListener(this::handleEvent);
     eventQueue.clear();

@@ -1,10 +1,13 @@
-from .geometry import *
+from .context import *
+from urllib.parse import urlparse
+from .contextualizer import Contextualizer
 from .logging import logger
 import requests
 import logging
 
 
 NIFI_HEALTHCHECK_PATH = "/healthcheck"
+CONTEXT_OBSERVATION_SEMANTICS = "earth:Terrestrial earth:Region"
 
 class KlabObservationNifiRequest(BaseModel):
     '''
@@ -18,41 +21,48 @@ class KlabObservationNifiRequest(BaseModel):
     '''
 
     def __init__(self, 
-                 observationName:str=None,
+                 ctx:Context = None,
                  observationSemantics:str=None,
-                 space:Space=None,
-                 time:Time=None,
                  dtURL:str=None,
+                 contextualizer:Contextualizer=None,
                  loglevel:str=logging.INFO):
         
         logger.debug("KLAB Nifi Observation Initialized")
-        logger.info("Building the Nifi Observation")
         logger.setLevel(loglevel)
 
-        if not observationName :
-            raise KlabNifiException("Observation Name cannot be non null")
+        if dtURL :
+            logger.debug("Validating and Setting the Digital Twin URL")
+            parsed = urlparse(dtURL)
+            if not all([parsed.scheme, parsed.netloc]):
+                raise KlabNifiException("Digital Twin URL is not valid")
+            
+            self.digitalTwin = dtURL
+        else:
+            raise KlabNifiException("Digital Twin URL cannot be Null for Observation Request")
         
         if not observationSemantics:
             raise KlabNifiException("Observation Query must be made with a Semantics")
+        
+        if ctx:
+            if observationSemantics != CONTEXT_OBSERVATION_SEMANTICS:
+                logger.info("A Context Observation would be first made, and the DT would then be queried for the actual observation")
+            else:
+                logger.info("Only Context Observation would be made")
+            self.context = ctx
+        else:
+            logger.info("No Context Set, the DT would be queried for the observation based on the previously set context")
 
-        logger.info("Setting Name and Semantics to the Observation")
-        self.name = observationName
+        if contextualizer :
+            if observationSemantics == CONTEXT_OBSERVATION_SEMANTICS:
+                raise KlabNifiException("Contextualizer cannot be set for a Context Observation")
+            
+            logger.info("Setting Contextualizer to the Observation")
+            self.contextualizer = contextualizer
 
-        ## To check how can we validate the semantics here without the Python Client
+
+        ##TODO: check how can we validate the semantics here without the Python Client
         ## Keeping it as it is for now
         self.semantics = observationSemantics 
-
-        if space and time :
-            logger.debug("Setting Geometry")
-            self.geometry = Geometry(space, time)
-
-        if dtURL :
-            logger.debug("Setting the Digital Twin URL")
-            self.digitalTwinUrl = dtURL
-        else:
-            logger.warning("Digital Twin URL not set, the KlabObservation " \
-            "Nifi Processor along with KlabController Service should be used to resolve k.LAB Observations")
-
         logger.info("Initial Validations Passed, Observation Payload Created")
 
 

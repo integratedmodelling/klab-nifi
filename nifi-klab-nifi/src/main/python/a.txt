@@ -1,0 +1,37 @@
+
+
+ Alpha3:
+    Weed.openeo Endpoint (Endpoint decomissioned in December, 2025) --> Nifi Endpoint --> Triggers Processing --> Creates STACs
+
+
+Beta:
+
+
+    OpenEO -->  Nifi Endpoint --> Processing --> .... -> Creates STAC  --> k.LAB Nifi Processor (Bercomes a part of your Nifi Workflow) --> STAC, UDPs are finished and the result STAC is ready, 
+    --> Push the Data to the DT (Pointers to STAC, coordinates)
+    
+    --> Setting a Context
+    --> Triggering an Obs in the Context
+
+    Needs to work:
+    --> Submit /Pushing  (Contextualizer, we are working )
+
+
+We will share the 
+
+OpenEO Processor --> attributes 
+
+
+OpenEO in SEEA, PeopleEA Triggeting UDPs, and We weregetting the data
+
+
+
+
+============================================================
+
+
+
+
+Py / Java -> Check the Status of STAC .. ==> Once all the UDPs are Success or Failure 
+==> Using the client ==> Use the client to Generate the JSON ==> Once geenrated ==> Create a flowfile out of the JSON
+==> Submit 

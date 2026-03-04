@@ -1,6 +1,6 @@
 from .commons import *
 from shapely import wkt
-from shapely.errors import WKTReadingError
+from shapely.errors import ShapelyError
 from shapely.geometry import Point, LineString, Polygon
 from typing import List, Union
 from .logging import logger
@@ -21,7 +21,7 @@ class Space(BaseModel):
                 geom = wkt.loads(shape)
                 logger.info("WKT String Validated Successfully")
 
-            except WKTReadingError:
+            except ShapelyError:
                 raise KlabNifiException("Invalid Geometry")
         else:
             try:
@@ -96,18 +96,26 @@ class Time(BaseModel):
         except (ValueError, OverflowError):
             return False
 
-
-class Geometry(BaseModel):
+class Context(BaseModel):
     '''
-    Creates a Geometry, with Space and Time
+    Creates a Spatio Temporal Context (a Substantial), with Space and Time
+    The Identity of a Substantial Observation i.e. Observations that can exist independently
+    necessarily need a Name, Namespace, and the ID is set as <Namespace>:<Name>
     '''
 
-    def __init__(self, space:Space=None, time:Time=None):
+    def __init__(self, space:Space=None, time:Time=None, ctxObservationNamespace:str=None, ctxObservationName:str=None):
 
         if not space or not time:
-            raise KlabNifiException("In geometry, both Spatial and Temporal Dimensions are required")
+            raise KlabNifiException("In Spatio Temporal Context, both Spatial and Temporal Dimensions are required")
+        
+        if not ctxObservationNamespace or not ctxObservationName:
+            raise KlabNifiException("Context Observation Name and Namespace are required for Spatio Temporal Context, since they are Substantials")
         
         self.space = space
         self.time = time
+        self.name = ctxObservationName 
+        self.namespace = ctxObservationNamespace
+
+
 
 

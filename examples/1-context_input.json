@@ -1,0 +1,19 @@
+{
+  "geometry" : {
+    "space" : {
+      "shape" : "EPSG:4326 POLYGON((33.796 -7.086, 35.946 -7.086, 35.946 -9.41, 33.796 -9.41, 33.796 -7.086))",
+      "sgrid" : "1.km",
+      "proj" : "EPSG:4326"
+    },
+    "time" : {
+      "tstart" : 1325376000000,
+      "tend" : 1356998400000,
+      "tunit" : "year",
+      "tscope" : 1
+    }
+  },
+  "name" : "example_observation",
+  "semantics" : "earth:Terrestrial earth:Region",
+  "digitalTwin" : "https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.xxxyyyzzz",
+  "observationId" : -1
+}

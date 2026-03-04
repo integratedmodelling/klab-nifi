@@ -1,0 +1,6 @@
+{
+  "name" : "example_observation",
+  "semantics" : "geography:Elevation",
+  "digitalTwin" : "https://services.integratedmodelling.org/runtime/main/dt/ESA_INSTITUTIONAL.xxxyyyzzz",
+  "observationId" : 123456789
+}
