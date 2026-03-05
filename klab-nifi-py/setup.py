@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="klab_nifi_py",            
-    version="0.0.3",                
+    version="0.0.4",                
     author="Arnab Moitra",
     author_email="arnab.moitra@bc3research.org",
     maintainer="Artificial Intelligence For Environment and Sustainability (ARIES) Team, Basque Centre for Climate Change (BC3)",
