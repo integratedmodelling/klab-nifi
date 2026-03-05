@@ -19,6 +19,12 @@ services:
       - NIFI_KLAB_DIR=./klab
       - SINGLE_USER_CREDENTIALS_USERNAME=${NIFI_USERNAME}
       - SINGLE_USER_CREDENTIALS_PASSWORD=${NIFI_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-fsk", "https://127.0.0.1:8443/nifi-api/access/config"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
     entrypoint: >
       bash -c "
         echo 'Copying custom NARs to lib...' &&

@@ -12,8 +12,8 @@ COPY nifi-klab-nifi-api-nar/pom.xml nifi-klab-nifi-api-nar/
 COPY nifi-klab-nifi/pom.xml nifi-klab-nifi/
 COPY nifi-klab-nifi-nar/pom.xml nifi-klab-nifi-nar/
 
-# Download dependencies (cached unless POMs change)
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B || true
+# Fix line endings and download dependencies (cached unless POMs change)
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw dependency:go-offline -B || true
 
 # Copy source code
 COPY nifi-klab-nifi-api nifi-klab-nifi-api
@@ -45,5 +45,8 @@ RUN chmod +x /opt/nifi/docker-entrypoint.sh
 USER nifi
 
 EXPOSE 8443 3306 3307
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD curl -fsk https://127.0.0.1:8443/nifi-api/access/config || exit 1
 
 ENTRYPOINT ["/opt/nifi/docker-entrypoint.sh"]
