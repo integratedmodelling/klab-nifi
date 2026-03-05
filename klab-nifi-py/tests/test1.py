@@ -26,7 +26,7 @@ klabContext = Context(
 persistantResourceConfig = contextualizer.PersistentResource(
     mode = contextualizer.PersistentResource.ResourceUpdateMode.UPDATE,
     namespace="klab.nifi.internal.tests.resources",
-    service="im.resources-main",
+    #service="im.resources-main",
     catalog ="staging",
     id="slope",
 )
@@ -49,10 +49,10 @@ stacCtx = contextualizer.STAC(
 
 
 klabNifiObs = KlabObservationNifiRequest(
-    #ctx= klabContext,
-    observationSemantics="geography:BathymetricDepth",
+    ctx= klabContext,
+    observationSemantics="geography:Heading",
     dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.warlt6kz2b",
-    contextualizer=stacCtx
+    contextualizer=ctx
 )
 
 print (klabNifiObs.to_dict())
