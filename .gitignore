@@ -9,3 +9,5 @@ docker-compose.yml
 examples
 nifi_input
 nifi_output
+.env
+.klab
