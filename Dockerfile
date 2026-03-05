@@ -44,6 +44,10 @@ USER root
 RUN chmod +x /opt/nifi/docker-entrypoint.sh
 USER nifi
 
+# NiFi web configuration - bind to all interfaces so ports are accessible outside the container
+ENV NIFI_WEB_HTTPS_HOST=0.0.0.0
+ENV NIFI_WEB_HTTPS_PORT=8443
+
 EXPOSE 8443 3306 3307
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
