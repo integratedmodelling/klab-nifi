@@ -27,6 +27,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.Urn;
@@ -276,13 +277,22 @@ public class KlabObservationWithDT extends AbstractProcessor {
     attributes.put("observation.id", resolvedObs.getId() + "");
     attributes.put("observation.type", resolvedObs.getType().toString());
     attributes.put("observation.urn", resolvedObs.getUrn());
+    var dims = resolvedObs.getGeometry().getDimensions();
+    for (var dim: dims) {
+      if (dim.getType().equals(Geometry.Dimension.Type.SPACE)) {
+        attributes.put("observation.geometry.shape", (String) dim.getParameters().get("shape"));
+      }
+    }
     attributes.put("digital.twin.url", dtURL);
+
+
 
     System.out.println("Observation ID: " + resolvedObs.getId() + "\n"
             + "Observation Name: " + resolvedObs.getName() + "\n"
             + resolvedObs.getObservable() + "\n"
             + "Observation URN: " + resolvedObs.getUrn() + "\n"
-            + "Observation Type: " + resolvedObs.getType().toString());
+            + "Observation Type: " + resolvedObs.getType().toString() + "\n"
+            + "Observation Geometry: " + resolvedObs.getGeometry());
 
     System.out.println(prettyGson.toJson(resolvedObs));
 
