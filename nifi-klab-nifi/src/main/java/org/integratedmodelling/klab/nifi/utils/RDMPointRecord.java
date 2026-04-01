@@ -8,7 +8,7 @@ public class RDMPointRecord {
     private final String timestamp;
     private final String eunis2021plus;
     private final String iucn_get;
-    private final String EU;
+    private final String eu;
     private final String type;
 
 
@@ -20,7 +20,7 @@ public class RDMPointRecord {
         this.timestamp = builder.timestamp;
         this.eunis2021plus = builder.eunis2021plus;
         this.iucn_get = builder.iucn_get;
-        this.EU = builder.EU;
+        this.eu = builder.eu;
         this.type = builder.type;
     }
 
@@ -31,7 +31,7 @@ public class RDMPointRecord {
     public String getTimestamp() { return timestamp; }
     public String getEunis2021plus() { return eunis2021plus; }
     public String getIUCNGet() { return iucn_get; }
-    public String getEU() { return EU; }
+    public String getEU() { return eu; }
     public String getType() { return type; }
 
 
@@ -44,7 +44,7 @@ public class RDMPointRecord {
         private String timestamp;
         private String eunis2021plus;
         private String iucn_get;
-        private String EU;
+        private String eu;
         private String type;
 
         public Builder setLat(float lat) { this.lat = lat; return this; }
@@ -54,7 +54,7 @@ public class RDMPointRecord {
         public Builder setTimestamp(String timestamp) { this.timestamp = timestamp; return this; }
         public Builder setEunis2021plus(String Eunis2021plus) { this.eunis2021plus = Eunis2021plus; return this; }
         public Builder setIUCNGet(String iucnGet) { this.iucn_get = iucnGet; return this; }
-        public Builder setEU(String EU) { this.EU = EU; return this; }
+        public Builder setEU(String eu) { this.eu = eu; return this; }
         public Builder setType(String type) { this.type = type; return this; }
 
         public RDMPointRecord build() {
