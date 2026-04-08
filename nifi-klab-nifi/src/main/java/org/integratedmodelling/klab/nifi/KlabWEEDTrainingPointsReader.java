@@ -151,7 +151,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             GenericRecord record;
             while ((record = reader.read()) != null && count < 10) {
                 RDMPointRecord rdmPoint = getRDMPointFromGenericRecord(record);
-                var timeStamps = parseTimeStampFromRDMPoints(rdmPoint.getTimestamp());
+                var timeStamp = parseTimeStampFromRDMPoints(rdmPoint.getTimestamp());
 
                 var tpContext = new KlabObservationNifiRequest.KlabContext.Builder()
                         .setName(collectionID + rdmPoint.getId())
@@ -161,8 +161,8 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                                         .setProj("EPSG:4326")
                                         .build())
                         .setTime(new KlabObservationNifiRequest.KlabContext.Time.Builder()
-                                        .setTime(timeStamps[0], timeStamps[1])
-                                        .setTunit("SECOND")
+                                        .setTime(timeStamp, timeStamp)
+                                        .setTunit("YEAR")
                                         .build())
                         .build();
 
@@ -223,7 +223,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
         return tempFile;  // Return the temp file object
     }
 
-    private static Date[] parseTimeStampFromRDMPoints(String dateTimeStr){
+    private static Date parseTimeStampFromRDMPoints(String dateTimeStr){
         final DateTimeFormatter FORMATTER =
                 DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, FORMATTER);
@@ -233,10 +233,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                 .toInstant()
                 .toEpochMilli();
 
-        Date current = new Date(millis);
-        Date next = new Date(millis + 1);
-
-        return new Date[] { current, next };
+        return new Date(millis);
     }
 
     public static RDMPointRecord getRDMPointFromGenericRecord (GenericRecord record) {

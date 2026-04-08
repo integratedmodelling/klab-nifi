@@ -51,7 +51,7 @@ stacCtx = contextualizer.STAC(
 klabNifiObs = KlabObservationNifiRequest(
     ctx= klabContext,
     observationSemantics="geography:Aspect",
-    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.y02ap1lgqn",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.1qr16tccj7b",
     #contextualizer=ctx
 )
 

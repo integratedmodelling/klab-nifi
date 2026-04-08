@@ -246,7 +246,7 @@ public class KlabObservationNifiRequest {
 
         public KlabContext.Time.Builder setTime(long start, long end)
                 throws KlabNifiException {
-          if (start >= end) {
+          if (start > end) {
             throw new KlabNifiException("Start time can't be more than the end time");
           }
           this.tstart = start;
