@@ -235,7 +235,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
         var identity = Urn.of(req.get().getContext().getNamespace() + ":" + req.get().getContext().getName()); // The Identity Problem
         getLogger().info("Received URN: " + identity.getUrn());
-        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName());
+        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName(), req.get().getMetadata());
         getLogger().info("Submitting the Context to the Digital Twin");
         resolvedObs = submitObservation(contextScope, obs);
         if (resolvedObs == null) {

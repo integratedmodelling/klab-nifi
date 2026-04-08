@@ -9,10 +9,14 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Date;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,12 +43,15 @@ import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.io.SeekableInputStream;
+import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 import org.integratedmodelling.klab.nifi.utils.RDMPointRecord;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKBReader;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.integratedmodelling.klab.nifi.utils.KlabRDMTrainingPointRequest;
+
+import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
 
 @Tags({"k.LAB", "WEED", "AI", "Semantic Web", "Digital Twins"})
 @InputRequirement(
@@ -124,7 +131,6 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
         int featureCount = req.get().getFeatureCount();
 
         getLogger().info("Found " + featureCount + "Number of points to analyse!");
-
         getLogger().info("Starting to Process the Parquet file");
         //https://iiasa.blob.core.windows.net/storage/coastal_2016_2020.parquet"
 
@@ -145,15 +151,52 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             GenericRecord record;
             while ((record = reader.read()) != null && count < 10) {
                 RDMPointRecord rdmPoint = getRDMPointFromGenericRecord(record);
-               System.out.println("Lat: " + rdmPoint.getLat());
-               System.out.println("Lon: " + rdmPoint.getLon());
-                count += 1;
+                var timeStamps = parseTimeStampFromRDMPoints(rdmPoint.getTimestamp());
+
+                var tpContext = new KlabObservationNifiRequest.KlabContext.Builder()
+                        .setName(collectionID + rdmPoint.getId())
+                        .setNamespace(KLAB_RDM_TRAINING_POINTS_NAMESPACE)
+                        .setSpace(new KlabObservationNifiRequest.KlabContext.Space.Builder()
+                                        .setShape(String.format("POINT (%f %f)", rdmPoint.getLon(), rdmPoint.getLat()))
+                                        .setProj("EPSG:4326")
+                                        .build())
+                        .setTime(new KlabObservationNifiRequest.KlabContext.Time.Builder()
+                                        .setTime(timeStamps[0], timeStamps[1])
+                                        .setTunit("SECOND")
+                                        .build())
+                        .build();
+
+                var obsReq = new KlabObservationNifiRequest.Builder()
+                        .setDigitalTwin(String.valueOf(dtURL))
+                        .setObservationSemantics(KLAB_RDM_TRAINING_POINTS_OBSERVATION_SEMANTICS)
+                        .setKlabContext(tpContext)
+                                .setMetadata(Map.of(
+                                        "iucn_get", rdmPoint.getIUCNGet(),
+                                        "eunis2021plus", rdmPoint.getEunis2021plus(),
+                                        "orig_id", rdmPoint.getOrigClass()
+                                ));
+
+
+
+                FlowFile newFF = session.create();
+                try {
+                    newFF = session.write(
+                            newFF,
+                            out -> {
+                                // Write event data to FlowFile content
+                                out.write(new Gson().toJson(obsReq).getBytes());
+                            });
+                    session.transfer(newFF, REL_SUCCESS);
+                } catch (Exception e){
+                    session.transfer(newFF, REL_FAILURE);
+                    getLogger().error("Exception: " + e.getStackTrace() + "While writing Observation Request");
+                    throw new Exception("Exception in generating Point Context Observations");
+                }
             }
-            session.transfer(flowfile, REL_SUCCESS);
             reader.close();
+            session.transfer(flowfile, REL_SUCCESS);
         } catch (Exception e) {
             session.transfer(flowfile, REL_FAILURE);
-            throw new RuntimeException(e);
         }
     }
 
@@ -180,30 +223,48 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
         return tempFile;  // Return the temp file object
     }
 
+    private static Date[] parseTimeStampFromRDMPoints(String dateTimeStr){
+        final DateTimeFormatter FORMATTER =
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, FORMATTER);
+
+        long millis = dateTime
+                .atZone(ZoneId.of("UTC")) // use UTC for consistency
+                .toInstant()
+                .toEpochMilli();
+
+        Date current = new Date(millis);
+        Date next = new Date(millis + 1);
+
+        return new Date[] { current, next };
+    }
+
     public static RDMPointRecord getRDMPointFromGenericRecord (GenericRecord record) {
 
         float pointLat = ((Number) record.get("lat")).floatValue();
         float pointLon = ((Number) record.get("lon")).floatValue();
         String origClass = record.get("orig_class") != null ? record.get("orig_class").toString() : null;
+        String origId = record.get("orig_id") != null ? record.get("orig_id").toString(): null;
         String description = record.get("description") != null ? record.get("description").toString() : null;
         String timestamp = record.get("timestamp") != null ? record.get("timestamp").toString() : null;
         String eunis = record.get("eunis2021plus") != null ? record.get("eunis2021plus").toString() : null;
         String iucn = record.get("iucn_get") != null ? record.get("iucn_get").toString() : null;
         String eu = record.get("eu") != null ? record.get("eu").toString() : null;
         String type = record.get("type") != null ? record.get("type").toString() : null;
+        String id = record.get("Id") != null ? record.get("Id").toString() : null;
 
         return new RDMPointRecord.Builder()
                 .setLat(pointLat)
                 .setLon(pointLon)
                 .setOrigClass(origClass)
                 .setDescription(description)
+                .setOrigId(origId)
                 .setTimestamp(timestamp)
                 .setEunis2021plus(eunis)
                 .setIUCNGet(iucn)
                 .setEU(eu)
+                .setId(id)
                 .setType(type)
                 .build();
-
-
     }
 }

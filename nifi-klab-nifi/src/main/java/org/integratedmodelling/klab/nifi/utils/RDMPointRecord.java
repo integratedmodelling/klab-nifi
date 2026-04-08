@@ -3,7 +3,9 @@ package org.integratedmodelling.klab.nifi.utils;
 public class RDMPointRecord {
     private final float lat;
     private final float lon;
+    private final String Id;
     private final String orig_class;
+    private final String orig_id;
     private final String description;
     private final String timestamp;
     private final String eunis2021plus;
@@ -15,11 +17,13 @@ public class RDMPointRecord {
     private RDMPointRecord(Builder builder) {
         this.lat = builder.lat;
         this.lon = builder.lon;
+        this.Id = builder.Id;
         this.orig_class = builder.orig_class;
         this.description = builder.description;
         this.timestamp = builder.timestamp;
         this.eunis2021plus = builder.eunis2021plus;
         this.iucn_get = builder.iucn_get;
+        this.orig_id = builder.orig_id;
         this.eu = builder.eu;
         this.type = builder.type;
     }
@@ -32,6 +36,8 @@ public class RDMPointRecord {
     public String getEunis2021plus() { return eunis2021plus; }
     public String getIUCNGet() { return iucn_get; }
     public String getEU() { return eu; }
+    public String getId() {return Id;}
+    public String getOrigId() {return orig_id;}
     public String getType() { return type; }
 
 
@@ -46,6 +52,8 @@ public class RDMPointRecord {
         private String iucn_get;
         private String eu;
         private String type;
+        private String orig_id;
+        private String Id;
 
         public Builder setLat(float lat) { this.lat = lat; return this; }
         public Builder setLon(float lon) { this.lon = lon; return this; }
@@ -56,6 +64,8 @@ public class RDMPointRecord {
         public Builder setIUCNGet(String iucnGet) { this.iucn_get = iucnGet; return this; }
         public Builder setEU(String eu) { this.eu = eu; return this; }
         public Builder setType(String type) { this.type = type; return this; }
+        public Builder setId(String id) {this.Id = id; return this; }
+        public Builder setOrigId(String origId) {this.orig_id = origId; return this;}
 
         public RDMPointRecord build() {
             return new RDMPointRecord(this);

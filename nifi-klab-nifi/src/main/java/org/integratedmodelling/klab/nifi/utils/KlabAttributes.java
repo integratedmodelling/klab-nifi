@@ -9,4 +9,6 @@ public class KlabAttributes {
   public static final String KLAB_CONTEXTUALIZER_PERSISTENCE_KEY = "persistent";
   public static final String KLAB_TIFF_MEDIA_TYPE = "image/tiff;application=geotiff";
   public static final String KLAB_TIFF_EXTENSION = "tiff";
+  public static final String KLAB_RDM_TRAINING_POINTS_OBSERVATION_SEMANTICS = "earth:Terrestrial earth:Site";
+  public static final String KLAB_RDM_TRAINING_POINTS_NAMESPACE = "rdm.iiasa.training.points";
 }
