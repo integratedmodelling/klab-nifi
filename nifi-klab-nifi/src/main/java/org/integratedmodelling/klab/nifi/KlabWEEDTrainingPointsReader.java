@@ -149,7 +149,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             int count = 0;
 
             GenericRecord record;
-            while ((record = reader.read()) != null && count < 10) {
+            while ((record = reader.read()) != null && count < featureCount) {
                 RDMPointRecord rdmPoint = getRDMPointFromGenericRecord(record);
                 var timeStamp = parseTimeStampFromRDMPoints(rdmPoint.getTimestamp());
 
@@ -187,6 +187,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                                 out.write(new Gson().toJson(obsReq).getBytes());
                             });
                     session.transfer(newFF, REL_SUCCESS);
+                    count += 1;
                 } catch (Exception e){
                     session.transfer(newFF, REL_FAILURE);
                     getLogger().error("Exception: " + e.getStackTrace() + "While writing Observation Request");
@@ -194,7 +195,8 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                 }
             }
             reader.close();
-            session.transfer(flowfile, REL_SUCCESS);
+            getLogger().info(count + " points have been successfully processed!");
+            session.remove(flowfile); // if all the observations are successfully processed, then don't send anything to the Obs processor
         } catch (Exception e) {
             session.transfer(flowfile, REL_FAILURE);
         }
