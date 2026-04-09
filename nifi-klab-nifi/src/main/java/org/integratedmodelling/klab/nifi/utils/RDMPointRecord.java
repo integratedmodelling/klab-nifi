@@ -1,5 +1,11 @@
 package org.integratedmodelling.klab.nifi.utils;
 
+import org.apache.avro.generic.GenericData;
+import org.apache.commons.text.StringEscapeUtils;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 public class RDMPointRecord {
     private final float lat;
     private final float lon;
@@ -7,7 +13,7 @@ public class RDMPointRecord {
     private final String orig_class;
     private final String orig_id;
     private final String description;
-    private final String timestamp;
+    private final Object timestamp;
     private final String eunis2021plus;
     private final String iucn_get;
     private final String eu;
@@ -32,7 +38,22 @@ public class RDMPointRecord {
     public float getLon() { return lon; }
     public String getOrigClass() { return orig_class; }
     public String getDescription() { return description; }
-    public String getTimestamp() { return timestamp; }
+    public long getTimestamp() {
+        if (timestamp instanceof GenericData.Fixed) {
+            System.out.println("Timestamp found to be of Type: GenericData.Fixed");
+            byte[] bytes = ((GenericData.Fixed) timestamp).bytes();
+            ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+
+            long nanosOfDay = buffer.getLong(); // first 8 bytes
+            int julianDay = buffer.getInt();    // last 4 bytes
+
+            return (julianDay - 2440588L) * 86400000L
+                    + (nanosOfDay / 1_000_000L);
+        }
+        System.out.println("Returning Long");
+        return (long) timestamp;
+    }
+
     public String getEunis2021plus() { return eunis2021plus; }
     public String getIUCNGet() { return iucn_get; }
     public String getEU() { return eu; }
@@ -47,7 +68,7 @@ public class RDMPointRecord {
         private float lon;
         private String orig_class;
         private String description;
-        private String timestamp;
+        private Object timestamp;
         private String eunis2021plus;
         private String iucn_get;
         private String eu;
@@ -59,7 +80,7 @@ public class RDMPointRecord {
         public Builder setLon(float lon) { this.lon = lon; return this; }
         public Builder setOrigClass(String orig_class) { this.orig_class = orig_class; return this; }
         public Builder setDescription(String description) { this.description = description; return this; }
-        public Builder setTimestamp(String timestamp) { this.timestamp = timestamp; return this; }
+        public Builder setTimestamp(Object timestamp) { this.timestamp = timestamp; return this; }
         public Builder setEunis2021plus(String Eunis2021plus) { this.eunis2021plus = Eunis2021plus; return this; }
         public Builder setIUCNGet(String iucnGet) { this.iucn_get = iucnGet; return this; }
         public Builder setEU(String eu) { this.eu = eu; return this; }

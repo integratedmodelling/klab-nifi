@@ -71,6 +71,10 @@ public class KlabRDMTrainingPointRequest {
                 throw new KlabNifiException("Digital Twin URL is missing, Build failed!");
             }
 
+            if(this.collectionId == null) {
+                throw new KlabNifiException("CollectionId is missing");
+            }
+
             return new KlabRDMTrainingPointRequest(this);
         }
     }

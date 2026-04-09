@@ -330,7 +330,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
   Queries the DT with the Unresolved Observation, and the Observation then gets resolved by
   the DT as resolvedObservation
    */
-  private Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
+  public static Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
           throws Exception {
 
     Observation resolvedObservation = null;
