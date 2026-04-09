@@ -277,13 +277,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
     attributes.put("observation.id", resolvedObs.getId() + "");
     attributes.put("observation.type", resolvedObs.getType().toString());
     attributes.put("observation.urn", resolvedObs.getUrn());
+    attributes.put("digital.twin.url", dtURL);
+
     var dims = resolvedObs.getGeometry().getDimensions();
     for (var dim: dims) {
       if (dim.getType().equals(Geometry.Dimension.Type.SPACE)) {
         attributes.put("observation.geometry.shape", (String) dim.getParameters().get("shape"));
       }
     }
-    attributes.put("digital.twin.url", dtURL);
 
 
 

@@ -10,9 +10,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.avro.generic.GenericRecord;
@@ -35,8 +33,6 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.io.InputFile;
-import org.apache.parquet.io.SeekableInputStream;
-import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
@@ -47,13 +43,13 @@ import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
 import org.integratedmodelling.klab.api.services.runtime.Message;
-import org.integratedmodelling.klab.nifi.utils.KlabObservationNifiRequest;
 import org.integratedmodelling.klab.nifi.utils.RDMPointRecord;
-import org.locationtech.jts.geom.Point;
-import org.locationtech.jts.io.ParseException;
-import org.locationtech.jts.io.WKBReader;
-import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
 import org.integratedmodelling.klab.nifi.utils.KlabRDMTrainingPointRequest;
+import org.locationtech.jts.io.WKTReader;
+import org.locationtech.jts.io.WKTWriter;
 
 import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
 
@@ -67,6 +63,10 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
                 + "The Processor that should follow it should be the KlabObservationWithDT Processor"
                 + "Note that this Processor is not generic, and pertains to a particular flow in the WEED Project")
 
+@WritesAttributes({
+        @WritesAttribute(attribute = "rdm.points.count", description = "Count of Points submitted to the Digital Twin"),
+        @WritesAttribute(attribute = "rdm.points.convex.hull", description="Convex Hull of the Points Submitted")
+})
 
 @SeeAlso( {KlabObservationWithDT.class})
 
@@ -129,6 +129,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
 
+        var pointsArray = new ArrayList<String>();
         FlowFile flowfile = session.get();
         if (flowfile == null) {
             getLogger().error("Incoming flowfile to the processor is null :( ");
@@ -151,14 +152,12 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                         getLogger().error("Error reading JSON", e);
                     }
                 });
-
-        getLogger().info("Payload parsing done...");
         URL pqDownloadURL = req.get().getParquetDownloadURL();
         URL dtURL = req.get().getDTUrl();
         String collectionID = req.get().getCollectionId();
         int featureCount = req.get().getFeatureCount();
 
-        getLogger().info("Found " + featureCount + "Number of points to analyse!");
+        getLogger().info("Found " + featureCount + "Number of points to add to Digital Twin " + dtURL.toString());
         getLogger().info("Starting to Process the Parquet file");
         ContextScope contextScope = (ContextScope) klabController.getScope(String.valueOf(dtURL), ContextScope.class);
         if (contextScope == null) {
@@ -177,9 +176,6 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                         .getService(Reasoner.class)
                         .resolveObservable(KLAB_RDM_TRAINING_POINTS_OBSERVATION_SEMANTICS);
         Gson prettyGson = new GsonBuilder().setPrettyPrinting().create();
-
-        System.out.println(prettyGson.toJson(observable));
-        System.out.println("RDM Training Points Observable Generated..");
         //https://iiasa.blob.core.windows.net/storage/coastal_2016_2020.parquet"
 
         try {
@@ -201,10 +197,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             GenericRecord record;
             while ((record = reader.read()) != null && count < featureCount) {
                 RDMPointRecord rdmPoint = getRDMPointFromGenericRecord(record);
-
-                System.out.println(prettyGson.toJson(rdmPoint));
-
-                var timeStamp = parseTimeStampFromRDMPoints(rdmPoint.getTimestamp());
+                var timeStamp = rdmPoint.getTimestamp();
                 var geometry =
                         GeometryImpl.builder()
                                 .space()
@@ -236,11 +229,16 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                             Message.MessageType.ContextObservationResolved,
                             resolvedObs);
                     getLogger().info("Context Observation was reolved successfully, the URN: " + resolvedObs.getUrn());
+                    pointsArray.add(String.format("POINT (%f %f)", rdmPoint.getLon(), rdmPoint.getLat()));
                 }
                 count += 1;
             }
             reader.close();
-            System.out.println(count + " points have been successfully processed!");
+            System.out.println(pointsArray.size() + " points have been successfully processed and added to the Digital Twin!");
+            Map<String, String> attributes = new HashMap<>();
+            attributes.put("rdm.points.count", String.valueOf(pointsArray.size()));
+            attributes.put("rdm.points.convex.hull", convexHullWkt(pointsArray));
+            session.putAllAttributes(flowfile, attributes);
             session.transfer(flowfile, REL_SUCCESS);
         } catch (Exception e) {
             getLogger().error("Processing failed", e);
@@ -271,19 +269,21 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
         return tempFile;  // Return the temp file object
     }
 
-    private static long parseTimeStampFromRDMPoints(long dateTimeStr){
-        System.out.println(dateTimeStr);
-        return dateTimeStr;
-//        final DateTimeFormatter FORMATTER =
-//                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-//        LocalDateTime dateTime = LocalDateTime.parse(dateTimeStr, FORMATTER);
-//
-//        // use UTC for consistency
-//
-//        return dateTime
-//                .atZone(ZoneId.of("UTC")) // use UTC for consistency
-//                .toInstant()
-//                .toEpochMilli();
+    public static String convexHullWkt(ArrayList<String> pointWkts) throws Exception {
+        GeometryFactory gf = new GeometryFactory();
+        WKTReader reader = new WKTReader(gf);
+
+        List<Coordinate> coords = new ArrayList<>();
+        for (String wkt : pointWkts) {
+            Geometry g = reader.read(wkt);
+            coords.add(g.getCoordinate());
+        }
+
+        Geometry geom = gf.createMultiPointFromCoords(coords.toArray(new Coordinate[0]));
+        Geometry hull = geom.convexHull();
+        System.out.println("Convex Hull Calculated for " + pointWkts.size() + " points");
+
+        return new WKTWriter().write(hull);
     }
 
     public static RDMPointRecord getRDMPointFromGenericRecord (GenericRecord record) {
