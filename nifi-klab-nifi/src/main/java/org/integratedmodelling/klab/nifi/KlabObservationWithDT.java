@@ -235,7 +235,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
         var identity = Urn.of(req.get().getContext().getNamespace() + ":" + req.get().getContext().getName()); // The Identity Problem
         getLogger().info("Received URN: " + identity.getUrn());
-        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName());
+        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName(), req.get().getMetadata());
         getLogger().info("Submitting the Context to the Digital Twin");
         resolvedObs = submitObservation(contextScope, obs);
         if (resolvedObs == null) {
@@ -277,13 +277,14 @@ public class KlabObservationWithDT extends AbstractProcessor {
     attributes.put("observation.id", resolvedObs.getId() + "");
     attributes.put("observation.type", resolvedObs.getType().toString());
     attributes.put("observation.urn", resolvedObs.getUrn());
+    attributes.put("digital.twin.url", dtURL);
+
     var dims = resolvedObs.getGeometry().getDimensions();
     for (var dim: dims) {
       if (dim.getType().equals(Geometry.Dimension.Type.SPACE)) {
         attributes.put("observation.geometry.shape", (String) dim.getParameters().get("shape"));
       }
     }
-    attributes.put("digital.twin.url", dtURL);
 
 
 
@@ -330,7 +331,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
   Queries the DT with the Unresolved Observation, and the Observation then gets resolved by
   the DT as resolvedObservation
    */
-  private Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
+  public static Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
           throws Exception {
 
     Observation resolvedObservation = null;
