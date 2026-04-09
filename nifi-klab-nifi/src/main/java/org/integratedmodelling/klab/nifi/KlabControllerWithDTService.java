@@ -32,6 +32,7 @@ import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.integratedmodelling.common.authentication.KlabCertificateImpl;
+import org.integratedmodelling.common.configuration.CommonConfiguration;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.engine.Engine;
@@ -115,8 +116,8 @@ public class KlabControllerWithDTService extends AbstractControllerService imple
 
     final boolean useDefaultPath = this.certificatePath == null || this.certificatePath.isBlank();
     if (useDefaultPath) {
-      getLogger().debug("Using default certificate path");
-      this.userScope = engine.authenticate();
+      getLogger().info("Using default certificate path");
+      this.userScope = this.engine.authenticate();
       getLogger().debug("User scope: " + this.userScope);
     } else {
       getLogger().debug("Using certificate path: " + this.certificatePath);
@@ -133,8 +134,9 @@ public class KlabControllerWithDTService extends AbstractControllerService imple
         throw new InitializationException(
                 "Certificate is not valid: " + certificate.getInvalidityCause());
       }
-      this.userScope = engine.authenticate(certificate);
+      this.userScope = this.engine.authenticate(certificate);
     }
+    Klab.INSTANCE.setConfiguration(new CommonConfiguration());
 
     if (this.userScope == null || this.userScope.getUser().isAnonymous()) {
       throw new InitializationException(
@@ -150,6 +152,7 @@ public class KlabControllerWithDTService extends AbstractControllerService imple
                       "User {} is not federated: messaging features disabled.",
                       userScope.getUser().getUsername());
     }
+
     this.engine.boot();
     this.configuredScope = this.userScope;
 

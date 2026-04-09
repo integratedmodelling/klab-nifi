@@ -16,3 +16,4 @@ org.integratedmodelling.klab.nifi.MessageRelayProcessor
 org.integratedmodelling.klab.nifi.KlabObservationWithDT
 org.integratedmodelling.klab.nifi.KlabObservationRequestGenerator
 org.integratedmodelling.klab.nifi.KlabAssetRetriever
+org.integratedmodelling.klab.nifi.KlabWEEDTrainingPointsReader

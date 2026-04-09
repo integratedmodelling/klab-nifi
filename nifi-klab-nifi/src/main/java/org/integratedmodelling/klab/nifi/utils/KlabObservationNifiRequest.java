@@ -22,6 +22,7 @@ public class KlabObservationNifiRequest {
   private final String semantics;
   private final String digitalTwin;
   private final Map<String, Object> contextualizer;
+  private final Map<String, String> metadata;
   private final long id;
 
   private KlabObservationNifiRequest(Builder builder) {
@@ -30,6 +31,7 @@ public class KlabObservationNifiRequest {
     this.digitalTwin = builder.digitalTwin;
     this.id = builder.id;
     this.contextualizer = builder.contextualizer;
+    this.metadata = builder.metadata;
   }
 
   /** Serialize this object to JSON */
@@ -43,6 +45,8 @@ public class KlabObservationNifiRequest {
     return context;
   }
 
+  public Map<String, String> getMetadata() {return metadata;}
+
   public String getObservationSemantics() {
     return semantics;
   }
@@ -55,17 +59,22 @@ public class KlabObservationNifiRequest {
 
   public static class Builder {
     private KlabContext context;
+    private Map<String, String> metadata;
     private String name;
     private String semantics;
     private long id = KLAB_UNRESOLVED_OBS_ID;
     private String digitalTwin;
     public boolean asContext;
-    public boolean resetContext;
     public Map<String, Object> contextualizer;
     public String namespace;
 
     public Builder setContextualizer(Map<String, Object> contextualizer) {
       this.contextualizer = contextualizer;
+      return this;
+    }
+
+    public Builder setMetadata(Map<String, String> metadata) {
+      this.metadata = metadata;
       return this;
     }
 
@@ -225,16 +234,6 @@ public class KlabObservationNifiRequest {
         private String tunit = "year"; // default
         private int tscope = 1; // default
 
-        public KlabContext.Time.Builder setTime(long start, long end)
-            throws KlabNifiException {
-          if (start > end) {
-            throw new KlabNifiException("Start time can't be more than the end time");
-          }
-          this.tstart = start;
-          this.tend = end;
-          return this;
-        }
-
         public KlabContext.Time.Builder setTime(Date start, Date end)
             throws KlabNifiException {
           if (start.after(end)) {
@@ -242,6 +241,16 @@ public class KlabObservationNifiRequest {
           }
           this.tstart = start.toInstant().toEpochMilli();
           this.tend = end.toInstant().toEpochMilli();
+          return this;
+        }
+
+        public KlabContext.Time.Builder setTime(long start, long end)
+                throws KlabNifiException {
+          if (start > end) {
+            throw new KlabNifiException("Start time can't be more than the end time");
+          }
+          this.tstart = start;
+          this.tend = end;
           return this;
         }
 

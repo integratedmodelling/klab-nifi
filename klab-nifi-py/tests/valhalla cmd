@@ -1,6 +1,0 @@
-docker run -v C:\Users\arnab.moitra\Desktop\valhalla:/custom_files ghcr.io/valhalla/valhalla:latest bash -c "valhalla_build_tiles \
-    -c /custom_files/config/valhalla.json \
-      /custom_files/data/basque-country-latest.osm.pbf && \
-    valhalla_build_admins \
-      -c /custom_files/config/valhalla.json \
-      /custom_files/data/basque-country-latest.osm.pbf"

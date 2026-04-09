@@ -27,6 +27,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
 import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
+import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.Urn;
@@ -234,7 +235,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
         var identity = Urn.of(req.get().getContext().getNamespace() + ":" + req.get().getContext().getName()); // The Identity Problem
         getLogger().info("Received URN: " + identity.getUrn());
-        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName());
+        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName(), req.get().getMetadata());
         getLogger().info("Submitting the Context to the Digital Twin");
         resolvedObs = submitObservation(contextScope, obs);
         if (resolvedObs == null) {
@@ -278,11 +279,21 @@ public class KlabObservationWithDT extends AbstractProcessor {
     attributes.put("observation.urn", resolvedObs.getUrn());
     attributes.put("digital.twin.url", dtURL);
 
+    var dims = resolvedObs.getGeometry().getDimensions();
+    for (var dim: dims) {
+      if (dim.getType().equals(Geometry.Dimension.Type.SPACE)) {
+        attributes.put("observation.geometry.shape", (String) dim.getParameters().get("shape"));
+      }
+    }
+
+
+
     System.out.println("Observation ID: " + resolvedObs.getId() + "\n"
             + "Observation Name: " + resolvedObs.getName() + "\n"
             + resolvedObs.getObservable() + "\n"
             + "Observation URN: " + resolvedObs.getUrn() + "\n"
-            + "Observation Type: " + resolvedObs.getType().toString());
+            + "Observation Type: " + resolvedObs.getType().toString() + "\n"
+            + "Observation Geometry: " + resolvedObs.getGeometry());
 
     System.out.println(prettyGson.toJson(resolvedObs));
 
@@ -320,7 +331,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
   Queries the DT with the Unresolved Observation, and the Observation then gets resolved by
   the DT as resolvedObservation
    */
-  private Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
+  public static Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
           throws Exception {
 
     Observation resolvedObservation = null;
