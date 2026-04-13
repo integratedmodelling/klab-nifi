@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -26,16 +25,15 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.collections.impl.ParametersImpl;
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.Geometry;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.Urn;
 import org.integratedmodelling.klab.api.knowledge.observation.Observation;
+import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationBuilderImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.impl.ObservationImpl;
 import org.integratedmodelling.klab.api.knowledge.observation.scale.time.Time;
 import org.integratedmodelling.klab.api.scope.ContextScope;
-import org.integratedmodelling.klab.api.scope.Scope;
 import org.integratedmodelling.klab.api.scope.UserScope;
 import org.integratedmodelling.klab.api.services.Reasoner;
 import org.integratedmodelling.klab.api.services.RuntimeService;
@@ -193,7 +191,6 @@ public class KlabObservationWithDT extends AbstractProcessor {
     System.out.println(prettyGson.toJson(observable));
     System.out.println("Observable Generated..");
 
-    ObservationImpl obs = null;
     Observation resolvedObs = null;
     FlowFile successFlowFile = session.create();
     try {
@@ -235,11 +232,21 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
         var identity = Urn.of(req.get().getContext().getNamespace() + ":" + req.get().getContext().getName()); // The Identity Problem
         getLogger().info("Received URN: " + identity.getUrn());
-        obs = DigitalTwin.createObservation(contextScope, ctxObservable, identity, geometry.build(), req.get().getContext().getName(), req.get().getMetadata());
+        var obs =  contextScope.observation(ctxObservable)
+                      .geometry(geometry.build())
+                      .metadata(req.get().getMetadata())
+                      .identity(req.get().getContext().getNamespace(), req.get().getContext().getName());
+
+
         getLogger().info("Submitting the Context to the Digital Twin");
-        resolvedObs = submitObservation(contextScope, obs);
-        if (resolvedObs == null) {
+        resolvedObs = submitObservation(obs);
+        if (resolvedObs.isEmpty()) {
           getLogger().error("Context Submission unsuccessful to the Digital Twin");
+
+          for (var notf: resolvedObs.getNotifications()){
+            getLogger().error(notf.getMessage());
+          };
+
           throw new Exception("Context Submission to DT: " + dtURL + "was Unsuccessful");
         } else {
           System.out.println(prettyGson.toJson(resolvedObs));
@@ -259,23 +266,24 @@ public class KlabObservationWithDT extends AbstractProcessor {
        */
       if(!req.get().getObservationSemantics().equals(KLAB_CONTEXT_OBSERVATION_SEMANTICS)) {
         ContextScope ctxS = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
-        obs = DigitalTwin.createObservation(ctxS, observable);
         ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
                 ctxS,
                 req.get().getContextualizer());
+        var obsB = contextScope.observation(observable);
+        ObservationImpl obs = (ObservationImpl) obsB.register();
         if (ctxData != null) {
           obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
         }
-        obs.setId(Observation.UNASSIGNED_ID);
+
         getLogger().info("Observation Payload Generation done, submitting the Observation");
-        resolvedObs = submitObservation(ctxS, obs);
+        resolvedObs = submitObservationViaRuntime(ctxS, obs);
       }
 
     System.out.println(prettyGson.toJson(resolvedObs));       // Convert the object to a pretty-printed JSON string
 
     Map<String, String> attributes = new HashMap<>();
     attributes.put("observation.id", resolvedObs.getId() + "");
-    attributes.put("observation.type", resolvedObs.getType().toString());
+    attributes.put("observation.type", resolvedObs.getObservable().getArtifactType().toString());
     attributes.put("observation.urn", resolvedObs.getUrn());
     attributes.put("digital.twin.url", dtURL);
 
@@ -292,7 +300,7 @@ public class KlabObservationWithDT extends AbstractProcessor {
             + "Observation Name: " + resolvedObs.getName() + "\n"
             + resolvedObs.getObservable() + "\n"
             + "Observation URN: " + resolvedObs.getUrn() + "\n"
-            + "Observation Type: " + resolvedObs.getType().toString() + "\n"
+            + "Observation Type: " + resolvedObs.classify().toString() + "\n"
             + "Observation Geometry: " + resolvedObs.getGeometry());
 
     System.out.println(prettyGson.toJson(resolvedObs));
@@ -331,11 +339,20 @@ public class KlabObservationWithDT extends AbstractProcessor {
   Queries the DT with the Unresolved Observation, and the Observation then gets resolved by
   the DT as resolvedObservation
    */
-  public static Observation submitObservation(ContextScope contextScope, Observation unresolvedObs)
+  public static Observation submitObservation(Observation.Builder unresolvedObs)
           throws Exception {
 
     Observation resolvedObservation = null;
-    CompletableFuture<Observation> future = contextScope.submit(unresolvedObs);
+    CompletableFuture<Observation> future = unresolvedObs.submit();
+    resolvedObservation = future.get();
+    return resolvedObservation;
+  }
+
+  public static Observation submitObservationViaRuntime(ContextScope ctxS,ObservationImpl unresolvedObs)
+          throws Exception {
+
+    Observation resolvedObservation = null;
+    CompletableFuture<Observation> future = ctxS.getService(RuntimeService.class).submit(unresolvedObs, ctxS);
     resolvedObservation = future.get();
     return resolvedObservation;
   }

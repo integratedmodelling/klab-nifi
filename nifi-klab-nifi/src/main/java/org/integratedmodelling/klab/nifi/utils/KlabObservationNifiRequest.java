@@ -5,6 +5,7 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.KLAB_UNRESO
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.integratedmodelling.common.utils.Utils;
@@ -22,7 +23,7 @@ public class KlabObservationNifiRequest {
   private final String semantics;
   private final String digitalTwin;
   private final Map<String, Object> contextualizer;
-  private final Map<String, String> metadata;
+  private final Map<String, Object> metadata;
   private final long id;
 
   private KlabObservationNifiRequest(Builder builder) {
@@ -45,21 +46,22 @@ public class KlabObservationNifiRequest {
     return context;
   }
 
-  public Map<String, String> getMetadata() {return metadata;}
-
-  public String getObservationSemantics() {
-    return semantics;
+  public Map<String, Object> getMetadata() {
+    if (metadata == null) {
+        return new HashMap<>();
+    }
+    return metadata;
   }
 
-  public Map<String, Object> getContextualizer() {
-    return contextualizer;
-  }
+  public String getObservationSemantics() { return semantics;}
+
+  public Map<String, Object> getContextualizer() { return contextualizer; }
 
   public String getDigitalTwin() { return digitalTwin; }
 
   public static class Builder {
     private KlabContext context;
-    private Map<String, String> metadata;
+    private Map<String, Object> metadata;
     private String name;
     private String semantics;
     private long id = KLAB_UNRESOLVED_OBS_ID;
@@ -73,7 +75,7 @@ public class KlabObservationNifiRequest {
       return this;
     }
 
-    public Builder setMetadata(Map<String, String> metadata) {
+    public Builder setMetadata(Map<String, Object> metadata) {
       this.metadata = metadata;
       return this;
     }
