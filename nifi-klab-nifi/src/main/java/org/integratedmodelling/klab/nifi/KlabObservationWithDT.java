@@ -269,8 +269,8 @@ public class KlabObservationWithDT extends AbstractProcessor {
         ObservationImpl.ContextualizationDataImpl ctxData = getContextualizationData(
                 ctxS,
                 req.get().getContextualizer());
-        var obsB = contextScope.observation(observable);
-        ObservationImpl obs = (ObservationImpl) obsB.register();
+        var nBuilder = new Observation.NaiveBuilder(observable ,ctxS);
+        ObservationImpl obs = (ObservationImpl) nBuilder.make();
         if (ctxData != null) {
           obs.setContextualizationData(ctxData); // Sets the Contextualizer ID i.e. "stac" or "wcs" / "wfs", and also if it needs to be persisted or not
         }
