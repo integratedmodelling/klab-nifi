@@ -14,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.avro.generic.GenericRecord;
-import org.apache.hadoop.fs.Path;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
@@ -33,7 +32,6 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.io.InputFile;
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.Urn;
@@ -211,12 +209,17 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
 
                 var identity = Urn.of(KLAB_RDM_TRAINING_POINTS_NAMESPACE + ":" + collectionID + "-" + rdmPoint.getId()); // The Identity Problem
                 getLogger().info("Received URN: " + identity.getUrn());
-                var obs = DigitalTwin.createObservation(contextScope, observable, identity, geometry.build(), Map.of(
-                        "iucn_get", rdmPoint.getIUCNGet(),
-                        "eunis2021plus", rdmPoint.getEunis2021plus(),
-                        "orig_id", rdmPoint.getOrigClass()
-                ));
-                Observation resolvedObs = KlabObservationWithDT.submitObservation(contextScope, obs);
+                var obs = contextScope.observation(observable)
+                        .geometry(geometry.build())
+                        .identity(KLAB_RDM_TRAINING_POINTS_NAMESPACE, collectionID+"-"+rdmPoint.getId())
+                        .metadata(
+                                Map.of(
+                                        "iucn_get", rdmPoint.getIUCNGet(),
+                                        "eunis2021plus", rdmPoint.getEunis2021plus(),
+                                        "orig_id", rdmPoint.getOrigClass()
+                                )
+                        );
+                Observation resolvedObs = KlabObservationWithDT.submitObservation(obs);
                 if (resolvedObs == null) {
                     getLogger().error("Training Points Submission unsuccessful to the Digital Twin");
                     throw new Exception("Context Submission to DT: " + dtURL + "was Unsuccessful");
