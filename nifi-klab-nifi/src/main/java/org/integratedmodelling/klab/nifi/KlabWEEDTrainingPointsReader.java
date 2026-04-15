@@ -9,12 +9,13 @@ import org.apache.parquet.io.LocalInputFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.avro.generic.GenericRecord;
-import org.apache.hadoop.fs.Path;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
@@ -33,7 +34,6 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.io.InputFile;
-import org.integratedmodelling.klab.api.digitaltwin.DigitalTwin;
 import org.integratedmodelling.klab.api.geometry.impl.GeometryImpl;
 import org.integratedmodelling.klab.api.knowledge.Observable;
 import org.integratedmodelling.klab.api.knowledge.Urn;
@@ -65,7 +65,8 @@ import static org.integratedmodelling.klab.nifi.utils.KlabAttributes.*;
 
 @WritesAttributes({
         @WritesAttribute(attribute = "rdm.points.count", description = "Count of Points submitted to the Digital Twin"),
-        @WritesAttribute(attribute = "rdm.points.convex.hull", description="Convex Hull of the Points Submitted")
+        @WritesAttribute(attribute = "rdm.points.convex.hull", description="Convex Hull of the Points Submitted"),
+        @WritesAttribute(attribute="rdm.points.dt.url", description = "The Digital Twin URL to which the Points have been submitted")
 })
 
 @SeeAlso( {KlabObservationWithDT.class})
@@ -184,8 +185,8 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             conf.set("parquet.avro.readInt96AsTimestamp", "true");
             conf.set("parquet.avro.int96.timestamp.timezone", "UTC");
 
-            File file = new File(downloadParquetToTemp(pqDownloadURL).getAbsolutePath());
-            InputFile inputFile = new LocalInputFile(Paths.get(file.getAbsolutePath()));
+            File pqFile = new File(downloadParquetToTemp(pqDownloadURL).getAbsolutePath());
+            InputFile inputFile = new LocalInputFile(Path.of(pqFile.getAbsolutePath()));
             ParquetReader<GenericRecord> reader = AvroParquetReader
                     .<GenericRecord>builder(inputFile)
                     .withConf(conf)
@@ -211,12 +212,17 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
 
                 var identity = Urn.of(KLAB_RDM_TRAINING_POINTS_NAMESPACE + ":" + collectionID + "-" + rdmPoint.getId()); // The Identity Problem
                 getLogger().info("Received URN: " + identity.getUrn());
-                var obs = DigitalTwin.createObservation(contextScope, observable, identity, geometry.build(), Map.of(
-                        "iucn_get", rdmPoint.getIUCNGet(),
-                        "eunis2021plus", rdmPoint.getEunis2021plus(),
-                        "orig_id", rdmPoint.getOrigClass()
-                ));
-                Observation resolvedObs = KlabObservationWithDT.submitObservation(contextScope, obs);
+                var obs = contextScope.observation(observable)
+                        .geometry(geometry.build())
+                        .identity(KLAB_RDM_TRAINING_POINTS_NAMESPACE, collectionID+"-"+rdmPoint.getId())
+                        .metadata(
+                                Map.of(
+                                        "iucn_get", rdmPoint.getIUCNGet(),
+                                        "eunis2021plus", rdmPoint.getEunis2021plus(),
+                                        "orig_id", rdmPoint.getOrigClass()
+                                )
+                        );
+                Observation resolvedObs = KlabObservationWithDT.submitObservation(obs);
                 if (resolvedObs == null) {
                     getLogger().error("Training Points Submission unsuccessful to the Digital Twin");
                     throw new Exception("Context Submission to DT: " + dtURL + "was Unsuccessful");
@@ -238,7 +244,11 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             Map<String, String> attributes = new HashMap<>();
             attributes.put("rdm.points.count", String.valueOf(pointsArray.size()));
             attributes.put("rdm.points.convex.hull", convexHullWkt(pointsArray));
+            attributes.put("rdm.points.dt.url", dtURL.toString());
+
             session.putAllAttributes(flowfile, attributes);
+            getLogger().info("Deleting the Temp file: " + pqFile.getAbsolutePath());
+            Files.delete(Path.of(pqFile.getAbsolutePath()));
             session.transfer(flowfile, REL_SUCCESS);
         } catch (Exception e) {
             getLogger().error("Processing failed", e);

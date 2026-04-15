@@ -21,6 +21,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.collections.Parameters;
+import org.integratedmodelling.klab.api.knowledge.Artifact;
 import org.integratedmodelling.klab.api.knowledge.KlabAsset;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
@@ -139,7 +140,7 @@ public class KlabAssetRetriever extends AbstractProcessor {
             return;
         }
 
-        if (obsType.equals("NUMBER")) {
+        if (obsType.equals(Artifact.Type.NUMBER.toString())) {
             ContextScope contextScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
             if (contextScope == null) { // This should never happen, guaranteed with the Observation Relay Processor
                 getLogger().info("No ContextScope available from the KlabController for the DT " + dtURL);
