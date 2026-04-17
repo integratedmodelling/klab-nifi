@@ -11,7 +11,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -177,7 +176,6 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
                         .getService(Reasoner.class)
                         .resolveObservable(KLAB_RDM_TRAINING_POINTS_OBSERVATION_SEMANTICS);
         Gson prettyGson = new GsonBuilder().setPrettyPrinting().create();
-        //https://iiasa.blob.core.windows.net/storage/coastal_2016_2020.parquet"
 
         try {
             Configuration conf = new Configuration();
@@ -243,6 +241,7 @@ public class KlabWEEDTrainingPointsReader extends AbstractProcessor {
             System.out.println(pointsArray.size() + " points have been successfully processed and added to the Digital Twin!");
             Map<String, String> attributes = new HashMap<>();
             attributes.put("rdm.points.count", String.valueOf(pointsArray.size()));
+            attributes.put("rdm.points.collection.id", collectionID);
             attributes.put("rdm.points.convex.hull", convexHullWkt(pointsArray));
             attributes.put("rdm.points.dt.url", dtURL.toString());
 

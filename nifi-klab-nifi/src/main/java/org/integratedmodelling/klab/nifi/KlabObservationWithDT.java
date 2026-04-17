@@ -237,16 +237,18 @@ public class KlabObservationWithDT extends AbstractProcessor {
                       .metadata(req.get().getMetadata())
                       .identity(req.get().getContext().getNamespace(), req.get().getContext().getName());
 
+        contextScope.send(
+                Message.MessageClass.DigitalTwin,
+                Message.MessageType.ObservationSubmissionStarted,
+                obs);
 
         getLogger().info("Submitting the Context to the Digital Twin");
         resolvedObs = submitObservation(obs);
         if (resolvedObs.isEmpty()) {
           getLogger().error("Context Submission unsuccessful to the Digital Twin");
-
           for (var notf: resolvedObs.getNotifications()){
             getLogger().error(notf.getMessage());
           };
-
           throw new Exception("Context Submission to DT: " + dtURL + "was Unsuccessful");
         } else {
           System.out.println(prettyGson.toJson(resolvedObs));
@@ -281,6 +283,16 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     System.out.println(prettyGson.toJson(resolvedObs));       // Convert the object to a pretty-printed JSON string
 
+    // If the ID is -1, the Resolution Process failed
+    if (resolvedObs == null || resolvedObs.getId() == -1) {
+      getLogger().info("The submitted Observation couldn't be resolved");
+      contextScope.send(
+              Message.MessageClass.DigitalTwin,
+              Message.MessageType.Error,
+              resolvedObs);
+      throw new Exception("The Submitted Observation couldn't be resolved");
+    }
+
     Map<String, String> attributes = new HashMap<>();
     attributes.put("observation.id", resolvedObs.getId() + "");
     attributes.put("observation.type", resolvedObs.getObservable().getArtifactType().toString());
@@ -295,7 +307,6 @@ public class KlabObservationWithDT extends AbstractProcessor {
     }
 
 
-
     System.out.println("Observation ID: " + resolvedObs.getId() + "\n"
             + "Observation Name: " + resolvedObs.getName() + "\n"
             + resolvedObs.getObservable() + "\n"
@@ -305,22 +316,13 @@ public class KlabObservationWithDT extends AbstractProcessor {
 
     System.out.println(prettyGson.toJson(resolvedObs));
 
-    // If the ID is -1, the Resolution Process failed
-    if (resolvedObs.getId() == -1) {
-      getLogger().info("The submitted Observation couldn't be resolved");
-      contextScope.send(
-              Message.MessageClass.DigitalTwin,
-              Message.MessageType.Error,
-              resolvedObs);
-      throw new Exception("The Submitted Observation couldn't be resolved");
-    }
-
       getLogger().info("Sending Messages of Observation Submission Finished for the Digital Twin..");
       contextScope.send(
               Message.MessageClass.DigitalTwin,
               Message.MessageType.ObservationSubmissionFinished,
               resolvedObs
       );
+
       successFlowFile = session.putAllAttributes(successFlowFile, attributes);
       ContextScope ctxScope = (ContextScope) klabController.getScope(dtURL, ContextScope.class);
       getLogger().info("Success Flowfile being sent to Success Relation..");

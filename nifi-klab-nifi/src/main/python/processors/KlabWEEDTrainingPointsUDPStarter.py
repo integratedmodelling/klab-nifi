@@ -71,9 +71,11 @@ class KlabWEEDTrainingPointsUDPStarter(FlowFileTransform):
 
         dt_url = flowfile.getAttribute("rdm.points.dt.url")
         convex_hull = flowfile.getAttribute("rdm.points.convex.hull")
+        collection_id = flowfile.getAttribute("rdm.points.collection.id")
 
-        if dt_url is None or dt_url.strip() == "" or convex_hull is None or convex_hull.strip() == "":
-            self.logger.error("Missing attribute: rdm.points.dt.url or rdm.points.convex.hull")
+
+        if dt_url is None or dt_url.strip() == "" or convex_hull is None or convex_hull.strip() == ""  or collection_id is None or collection_id.strip() == "":
+            self.logger.error("Missing attribute: rdm.points.dt.url or rdm.points.convex.hull or rdm.points.collection.id")
             return FlowFileTransformResult(relationship="failure")
 
 
@@ -90,25 +92,22 @@ class KlabWEEDTrainingPointsUDPStarter(FlowFileTransform):
                 else:
                     self.logger.warn(f"Invalid parameter format: {param}. Expected format is key=value.")
 
-
-        connection = openeo.connect("openeo.dataspace.copernicus.eu").authenticate_oidc() ##TODO: Fix Auth, OIDC not working ?
         self.logger.info(f"Convex Hull from Attribute: {convex_hull}")
 
-        #connection = openeo.connect("openeo.dataspace.copernicus.eu").authenticate_oidc_client_credentials(
-        #    client_id=context.getProperty(self.oidc_client_id).getValue(),
-        #    client_secret=context.getProperty(self.oidc_client_secret).getValue()
-        #)
+        connection = openeo.connect("openeo.dataspace.copernicus.eu").authenticate_oidc_client_credentials(
+            client_id=context.getProperty(self.oidc_client_id).getValue(),
+            client_secret=context.getProperty(self.oidc_client_secret).getValue()
+        )
 
         geom = from_wkt(convex_hull)
         cube = connection.datacube_from_process(
             process_id ="udp_trainstarter",
             namespace = namespace,
             geometry = to_geojson(geom),
-            geojson = to_geojson(geom),
             year = param_dict.get("year", 2024),
-            drm_table = param_dict.get("drm_table", "global-training"), ## TODO: Check where from we would get this.. Possibly we shouldn't fix this in the params, but from the Geometry
-            digitalId = param_dict.get("digitalId", "B1"),
-            scenarioId = param_dict.get("scenarioId", "AM1729"),
+            drm_table = collection_id,
+            digitalId  = param_dict.get("digitalId", "KlabWEEDTrainingPoints"), ## Anything: No Constraints
+            scenarioId = param_dict.get("scenarioId", "AM1729"), ## Anything: No Constraints 
             dt_url = dt_url)
         
         job = cube.create_job(title=f'UDP_tests_{param_dict.get("digitalId")}_{param_dict.get("scenarioId")}_AOI', auto_add_save_result=False)
