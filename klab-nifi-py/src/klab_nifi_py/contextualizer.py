@@ -1,6 +1,7 @@
 from pydantic.dataclasses import dataclass
 from dataclasses import field
 from .commons import BaseModel, KLAB_SERVICETYPE_KEY
+from .resource_handler.stac import STAC_Handler
 from .logging import logger
 
 
@@ -113,7 +114,10 @@ class STAC(Contextualizer):
     def __post_init__(self):
         object.__setattr__(self, KLAB_SERVICETYPE_KEY, "stac")
         self.persistantConfigCheck()
-
-
-
-
+        exist, s3_endpoint_url, collection_id = STAC_Handler.STACValidate(self.collection, self.asset)
+        if not exist:
+            raise ValueError(f"Asset {self.asset} not found in STAC collection {self.collection}")
+        
+        self.collectionId = collection_id
+        if s3_endpoint_url:
+            self.s3EndpointUrl = s3_endpoint_url
