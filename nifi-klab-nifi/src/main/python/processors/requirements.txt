@@ -7,4 +7,4 @@ pystac-client
 scipy
 pandas
 numpy
-itertools
+requests

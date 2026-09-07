@@ -12,8 +12,7 @@ import rasterio
 from rasterio.vrt import WarpedVRT
 from rasterio.merge import merge
 from rasterio.enums import Resampling
-import os
-import sys
+import scipy
 from typing import List
 import time
 from argparse import ArgumentParser
@@ -23,6 +22,8 @@ import rasterio as rt
 import pandas as pd
 import numpy as np
 import itertools
+import os
+import sys
 from sys import exit
 
 
@@ -59,14 +60,14 @@ class HybridModellingStarter(FlowFileTransform):
             name = "Bounding Box",
             description = "Bounding Box of the Hybrid Request (minX, minY, maxX, maxY)",
             validators = [StandardValidators.NON_EMPTY_VALIDATOR],
-            required=True
+            required=False
         )
 
         self.eo_type = PropertyDescriptor(
             name = "EO Type",
             description = "EO Type: IUCN GET or EUNIS",
             validators=[StandardValidators.NON_EMPTY_VALIDATOR],
-            required=True
+            required=False
         )
 
         self.oidc_client_id = PropertyDescriptor(
@@ -90,7 +91,7 @@ class HybridModellingStarter(FlowFileTransform):
     def getPropertyDescriptors(self):
         return self.descriptors
 
-    def generate_hybrid_maps(map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
+    def generate_hybrid_maps(self, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
         """
         # description
         #----------------------------------------------------------------------------#
@@ -282,14 +283,10 @@ class HybridModellingStarter(FlowFileTransform):
         ods.write(oa)
         ods.close()
 
-    def make_confusion_matrix_request(client_id:str, client_secret:str, asset_hrefs: List[str], eo_type:str, collection_id:str=RDM_COLLECTION_ID, output_file_path:str="file.xlsx"):
-
-        TOKEN_URL = (
-            "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-        )
+    def make_confusion_matrix_request(self, client_id:str, client_secret:str, asset_hrefs: List[str], eo_type:str, collection_id:str=RDM_COLLECTION_ID, output_file_path:str="file.xlsx"):
 
         response = requests.post(
-            TOKEN_URL,
+            CDSE_OIDC_ENDPOINT,
             data={
                 "grant_type": "client_credentials",
                 "client_id": client_id,
@@ -301,9 +298,10 @@ class HybridModellingStarter(FlowFileTransform):
 
         access_token = response.json()["access_token"]
 
-        print(access_token)
+        self.logger.info(access_token)
 
         url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix"
+
         payload = {
             "collectionId": collection_id,
             "stacTifUrls": asset_hrefs,
@@ -316,7 +314,8 @@ class HybridModellingStarter(FlowFileTransform):
         }
 
         response = requests.put(url, json=payload, headers=headers)
-        self.logger.info(response.json())
+        self.logger.info(str(payload))
+        self.logger.info(str(response.json()))
         response.raise_for_status()  # raises an exception for 4xx/5xx responses
         reqdID = response.json().get("id")
         self.logger.info("Polling the Status of the Request")
@@ -333,7 +332,7 @@ class HybridModellingStarter(FlowFileTransform):
                 break
             else:
                 self.logger.info("Request still processing. Waiting for 10 seconds before checking again...")
-                time.sleep(10)
+                time.sleep(1)
 
         with requests.get(excelResultUrl, stream=True) as response:
             response.raise_for_status()
@@ -345,7 +344,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         print(f"Downloaded to {output_file_path}")
 
-    def download_tiff(href: str, dest_dir: str) -> str:
+    def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
         local_path = os.path.join(dest_dir, os.path.basename(href.split("?")[0]))
         with requests.get(href, stream=True) as r:
@@ -356,10 +355,10 @@ class HybridModellingStarter(FlowFileTransform):
         return local_path
 
 
-    def merge_tiffs(hrefs: list[str], output_path: str, resampling: Resampling = Resampling.nearest):
+    def merge_tiffs(self, hrefs: list[str], output_path: str, resampling: Resampling = Resampling.nearest):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
-            local_paths = [download_tiff(href, tmp_dir) for href in hrefs]
+            local_paths = [self.download_tiff(href, tmp_dir) for href in hrefs]
 
             # Determine target CRS from the first asset
             with rasterio.open(local_paths[0]) as first_ds:
@@ -407,23 +406,37 @@ class HybridModellingStarter(FlowFileTransform):
             self.logger.error("Incoming flowfile is null")
             return FlowFileTransformResult(relationship="failure")
 
-        dt_url = flowfile.getAttribute("dt.url")
+        dt_url = flowfile.getAttribute("dt_url")
         if dt_url is None or dt_url.strip() == "":
             self.logger.error("DT URL is missing")
             return FlowFileTransformResult(relationship="failure")
 
         eo_type = context.getProperty(self.eo_type).getValue()
-        if eo_type not in ["GET","EUNIS"]:
+        if eo_type == None:
+            eo_type = flowfile.getAttribute("eo_type")
+
+        if eo_type.upper() not in ["GET","EUNIS"]:
             self.logger.error("eo_type should be one of EUNIS or GET")
             return FlowFileTransformResult(relationship="failure")
 
-        bbox = context.getProperty(self.bbox).getValue().split(",")
-        bbox = [int(item) for item in bbox]
+        bbox = context.getProperty(self.bbox).getValue()
+        if bbox == None:
+            bbox = flowfile.getAttribute("bbox")
+
+        if bbox == None:
+            self.logger.error("BBOX shouldn't be null")
+            return FlowFileTransformResult(relationship="failure")
+
+        bbox = bbox.split(",")
+        bbox = [float(item) for item in bbox]
+
+        client_id = context.getProperty(self.oidc_client_id).getValue()
+        client_secret = context.getProperty(self.oidc_client_secret).getValue()
 
         vito_stac = pystac_client.Client.open(VITO_STAC_CATALOG)
         im_stac = pystac_client.Client.open(IM_STAC_CATALOG)
 
-        match eo_type:
+        match eo_type.upper():
             case "EUNIS":
                 ml_items =vito_stac.search(
                             collections=[EUNIS_ML_STAC_COLLECTION_ID],
@@ -445,11 +458,11 @@ class HybridModellingStarter(FlowFileTransform):
         '''
         rb_items = im_stac.search(
             collections=[RB_STAC_COLLECTION_ID],
-            bbox=req_bbox,
+            bbox=bbox,
             limit = 1000).items()
 
 
-        match req_eo_type:
+        match eo_type:
             case "EUNIS":
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "eunis" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
             case "GET":
@@ -459,16 +472,18 @@ class HybridModellingStarter(FlowFileTransform):
 
         ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + asset_href[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
 
-        self.logger.info("Generating ML Inferences from " + ml_item_hrefs.join(","))
-        self.logger.info("Generating RB Inferences from " + rb_item_hrefs.join(","))
+        self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
+        self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
 
-        ml_map = merge(ml_item_hrefs, "ml_map.tif")
-        rb_map = merge(rb_item_hrefs, "rb_map.tif")
+        self.merge_tiffs(ml_item_hrefs, "ml_map.tif")
+        self.merge_tiffs(rb_item_hrefs, "rb_map.tif")
 
-        make_confusion_matrix_request(ml_item_hrefs , req_eo_type)
-        make_confusion_matrix_request(rb_item_hrefs , req_eo_type)
+        self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "ml_confusion_matrix.xlsx")
+        self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "rb_confusion_matrix.xlsx")
 
-        generate_hybrid_maps(
+        self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
+
+        self.generate_hybrid_maps(
             map1="ml_map.tif",
             map2="rb_map.tif",
             matrix1="ml_confusion_matrix.xlsx",
