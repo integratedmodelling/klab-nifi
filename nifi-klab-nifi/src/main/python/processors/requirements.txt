@@ -1,3 +1,10 @@
 openeo
 geopandas
 shapely
+rasterio
+pystac
+pystac-client
+scipy
+pandas
+numpy
+itertools
