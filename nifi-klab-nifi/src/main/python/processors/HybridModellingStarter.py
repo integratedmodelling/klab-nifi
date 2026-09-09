@@ -70,6 +70,14 @@ class HybridModellingStarter(FlowFileTransform):
             required=False
         )
 
+        self.typology_level = PropertyDescriptor(
+            name = "Typology Level",
+            description = "Typology Level 1, 2 or 3, Generic to Specific Heirarchical Ordering",
+            allowable_values=["1", "2", "3"],
+            required = False,
+            default_value = "3" # By default, the most specific one
+        )
+
         self.oidc_client_id = PropertyDescriptor(
             name="OIDC CLIENT ID",
             description="OIDC Client ID for CDSE Backend required to Login and Make Calls to RDM",
@@ -86,12 +94,34 @@ class HybridModellingStarter(FlowFileTransform):
             sensitive=True # Sensitive Field
         )
 
-        self.descriptors = [self.bbox, self.eo_type, self.oidc_client_id, self.oidc_client_secret]
+        self.descriptors = [self.bbox, self.eo_type, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
 
     def getPropertyDescriptors(self):
         return self.descriptors
 
-    def generate_hybrid_maps(self, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
+
+    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None)->pd.DataFrame:
+        cm1 = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
+        classes = cm1.iloc[2].tolist()
+        classes = [x for x in classes if str(x) != 'nan'and "User" not in str(x)]
+
+        data = []
+        for i in range(cm1.shape[1]):
+            for j in range(cm1.shape[0]):
+                ref = cm1.iloc[2][i]
+                pred = cm1.iloc[j][1]
+
+                if ref in classes and pred in classes:
+                    freq = cm1.iloc[i][j]
+
+                    data.append({
+                        "reference": ref, "predicted": pred, "frequency": freq
+                    })
+
+        return pd.DataFrame(data)
+
+
+    def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
         """
         # description
         #----------------------------------------------------------------------------#
@@ -106,6 +136,7 @@ class HybridModellingStarter(FlowFileTransform):
         #----------------------------------------------------------------------------#
 
 
+        self.logger.info("Generating Hybrid Maps for Typology Level: " + str(typology_level))
         if map1 is None:
 
             parser = ArgumentParser(description = 'combine and update classified maps')
@@ -138,47 +169,62 @@ class HybridModellingStarter(FlowFileTransform):
         #----------------------------------------------------------------------------#
 
         if not isfile(map1):
-            exit("path to map 1 invalid")
+            self.logger.error("path to map 1 invalid")
+            return False
 
         if not isfile(map2):
-            exit("path to map 2 invalid")
+            self.logger.error("path to map 2 invalid")
+            return False
 
         if not isfile(matrix1):
-            exit("path to confusion matrix of map 1 invalid")
+            self.logger.error("path to confusion matrix of map 1 invalid")
+            return False
 
         if not isfile(matrix2):
-            exit("path to confusion matrix of map 2 invalid")
+            self.logger.error("path to confusion matrix of map 2 invalid")
+            return False
 
         # access inputs and check data structure
         #----------------------------------------------------------------------------#
 
         # read confusion matrices
-        cm1 = pd.read_table(matrix1, sep=None, engine="python", index_col=0)
-        cm2 = pd.read_table(matrix2, sep=None, engine="python", index_col=0)
+        sheet_name = "Level"+str(typology_level)+"Results"
+        self.logger.info("Fetching sheet " + sheet_name + " from the Confusion Matrix Excel")
+
+        cm1 = self.confusion_matrix_preprocessing(matrix1, sheet_name=sheet_name)
+        cm2 = self.confusion_matrix_preprocessing(matrix2, sheet_name=sheet_name)
+
+        self.logger.info(cm2.head().to_string())
+        self.logger.info(cm1.head().to_string())
 
         # exit if the inputs are not matching
         if cm1.shape != cm1.shape:
-            exit("confusion matrices have different numbers of rows/columns")
+            self.logger.error("confusion matrices have different numbers of rows/columns")
+            return False
 
         # check column names of cm1
         if not all(np.isin(cm1.columns,["reference","predicted","frequency"])):
-            exit("confusion matrix for map 1 lacks needed columns")
+            self.logger.error("confusion matrix for map 1 lacks needed columns")
+            return False
 
         # check column names of cm2
-        if not all(np.isin(cm2.columns,["reference","predicted	","frequency"])):
-            exit("confusion matrix for map 1 lacks needed columns")
+        if not all(np.isin(cm2.columns,["reference","predicted","frequency"])):
+            self.logger.error("confusion matrix for map 1 lacks needed columns")
+            return False
 
         # access map 1
         try:
-            m1_ds = rt.open(m1)
-        except:
-            exit("map 1 is not a valid raster")
+            m1_ds = rt.open(map1)
+        except Exception as e:
+            self.logger.error(f"map 1 is not a valid raster, due to {e}")
+            return False
 
         # access map 2
         try:
-            m2_ds = rt.open(m2)
-        except:
-            exit("map 2 is not a valid raster")
+            m2_ds = rt.open(map2)
+        except Exception as e:
+            self.logger.error(f"map 2 is not a valid raster, dur to {e}")
+            return False
 
         # read rasters
         m1 = m1_ds.read(1)
@@ -271,17 +317,22 @@ class HybridModellingStarter(FlowFileTransform):
         p = m1_ds.profile.copy()
 
         # export classified map
+        self.logger.info("Writing the Final Classes")
         oname = f'{output}/{name}-hybridMap_classification.tif'
         ods = rt.open(oname, "w", **p)
         ods.write(oa, index=1)
         ods.close()
 
         # export confidence map
+        self.logger.info("Writing Confidence Map")
         oname = f'{output}/{name}-hybridMap_confidence.tif'
         p.update(count=len(cm1.index)) # update band count
         ods = rt.open(oname, "w", **p)
         ods.write(oa)
         ods.close()
+
+        self.logger.info("Successfully generated Hybrid Map and Confidence Maps")
+        return True
 
     def make_confusion_matrix_request(self, client_id:str, client_secret:str, asset_hrefs: List[str], eo_type:str, collection_id:str=RDM_COLLECTION_ID, output_file_path:str="file.xlsx"):
 
@@ -295,11 +346,9 @@ class HybridModellingStarter(FlowFileTransform):
         )
 
         response.raise_for_status()
-
         access_token = response.json()["access_token"]
 
         self.logger.info(access_token)
-
         url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix"
 
         payload = {
@@ -332,7 +381,11 @@ class HybridModellingStarter(FlowFileTransform):
                 break
             else:
                 self.logger.info("Request still processing. Waiting for 10 seconds before checking again...")
-                time.sleep(1)
+                time.sleep(10)
+
+        if excelResultUrl is None:
+            self.logger.error("Couldn't find the Excel Result in the RDM Response")
+            return False
 
         with requests.get(excelResultUrl, stream=True) as response:
             response.raise_for_status()
@@ -342,7 +395,8 @@ class HybridModellingStarter(FlowFileTransform):
                     if chunk:
                         f.write(chunk)
 
-        print(f"Downloaded to {output_file_path}")
+        self.logger.info(f"Downloaded Confusion Matrix (.xlsx) to {output_file_path}")
+        return True
 
     def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
@@ -473,24 +527,40 @@ class HybridModellingStarter(FlowFileTransform):
         ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + asset_href[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
 
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif")
+        success = self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/ml_confusion_matrix.xlsx")
+        if not success:
+            self.logger.error("Confusion Matrix wasn't generated successfully for Machine Learning Model Outputs")
+            return FlowFileTransformResult(relationship="failure")
+
+
+
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif")
+        success = self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/rb_confusion_matrix.xlsx")
+        if not success:
+            self.logger.info("Confusion Matrix wasn't generated successfully for Rule Based Model Outputs")
+            return FlowFileTransformResult(relationship="failure")
 
-        self.merge_tiffs(ml_item_hrefs, "ml_map.tif")
-        self.merge_tiffs(rb_item_hrefs, "rb_map.tif")
-
-        self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "ml_confusion_matrix.xlsx")
-        self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "rb_confusion_matrix.xlsx")
 
         self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
 
-        self.generate_hybrid_maps(
-            map1="ml_map.tif",
-            map2="rb_map.tif",
-            matrix1="ml_confusion_matrix.xlsx",
-            matrix2="rb_confusion_matrix.xlsx",
+        result = self.generate_hybrid_maps(
+            typology_level = int(context.getProperty(self.typology_level).getValue()),
+            map1="raster/ml_map.tif",
+            map2="raster/rb_map.tif",
+            matrix1="excel/ml_confusion_matrix.xlsx",
+            matrix2="excel/rb_confusion_matrix.xlsx",
             output=".",
             name="hybrid"
         )
+
+        if not result:
+            self.logger.error("Error while creating the Hybrid Maps from ML and RB Workflows and confusion matrices")
+            return FlowFileTransformResult(relationship="failure")
+
+        self.logger.info("Successfully generated Hybrid Maps and Confidence Maps")
+        return FlowFileTransformResult(relationship="success")
 
 
 
