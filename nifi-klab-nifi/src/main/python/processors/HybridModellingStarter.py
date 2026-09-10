@@ -12,6 +12,7 @@ import rasterio
 from rasterio.vrt import WarpedVRT
 from rasterio.merge import merge
 from rasterio.enums import Resampling
+from rasterio.warp import transform_bounds
 import scipy
 from typing import List
 import time
@@ -227,8 +228,8 @@ class HybridModellingStarter(FlowFileTransform):
             return False
 
         # read rasters
-        m1 = m1_ds.read(1)
-        m2 = m2_ds.read(1)
+        m1 = m1_ds.read(1).astype(np.float32)
+        m2 = m2_ds.read(1).astype(np.float32)
 
         # assign NA value if needed
         m1[np.where(m1 == m1_ds.nodata)] = np.nan
@@ -409,7 +410,10 @@ class HybridModellingStarter(FlowFileTransform):
         return local_path
 
 
-    def merge_tiffs(self, hrefs: list[str], output_path: str, resampling: Resampling = Resampling.nearest):
+    def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None, nodata_value: float = None, resampling: Resampling = Resampling.nearest):
+
+        self.logger.info("Proceeding to Merging the Tiffs")
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
             local_paths = [self.download_tiff(href, tmp_dir) for href in hrefs]
@@ -417,21 +421,36 @@ class HybridModellingStarter(FlowFileTransform):
             # Determine target CRS from the first asset
             with rasterio.open(local_paths[0]) as first_ds:
                 target_crs = first_ds.crs
-            print(f"Target CRS (from first asset): {target_crs}")
+                if nodata_value is None:
+                    nodata_value = first_ds.nodata
+
+            self.logger.info(f"Target CRS (from first asset): {target_crs}")
+
+            out_bounds = None
+            if bbox is not None:
+                out_bounds = transform_bounds("EPSG:4326", target_crs, *bbox)
+                self.logger.info(f"Forcing output bounds to bbox (reprojected): {out_bounds}")
 
             # Open all datasets, wrapping any mismatched-CRS ones in a WarpedVRT
             datasets = []
             for path in local_paths:
                 ds = rasterio.open(path)
                 if ds.crs != target_crs:
-                    vrt = WarpedVRT(ds, crs=target_crs, resampling=resampling)
+                    vrt = WarpedVRT(ds, crs=target_crs, resampling=resampling,nodata=nodata_value)
                     datasets.append(vrt)
                 else:
                     datasets.append(ds)
 
             try:
-                # Merge into a single mosaic array + transform
-                mosaic, out_transform = merge(datasets)
+                # Merge into a single mosaic array + transform,
+                # forcing bounds to the full bbox so uncovered areas
+                # are filled with nodata rather than cropped away
+                mosaic, out_transform = merge(
+                    datasets,
+                    bounds=out_bounds,
+                    nodata=nodata_value,
+                    resampling=resampling,
+                )
 
                 out_meta = datasets[0].meta.copy()
                 out_meta.update({
@@ -440,6 +459,7 @@ class HybridModellingStarter(FlowFileTransform):
                     "width": mosaic.shape[2],
                     "transform": out_transform,
                     "crs": target_crs,
+                    "nodata": nodata_value,
                     "compress": "deflate",
                     "tiled": True,
                     "bigtiff": "IF_SAFER",
@@ -527,7 +547,7 @@ class HybridModellingStarter(FlowFileTransform):
         ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + asset_href[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
 
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
-        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif")
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox)
         success = self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/ml_confusion_matrix.xlsx")
         if not success:
             self.logger.error("Confusion Matrix wasn't generated successfully for Machine Learning Model Outputs")
@@ -536,7 +556,7 @@ class HybridModellingStarter(FlowFileTransform):
 
 
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
-        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif")
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox)
         success = self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/rb_confusion_matrix.xlsx")
         if not success:
             self.logger.info("Confusion Matrix wasn't generated successfully for Rule Based Model Outputs")
