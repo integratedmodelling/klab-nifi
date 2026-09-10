@@ -1,4 +1,3 @@
-
 import requests
 from ..logging import logger
 from typing import Tuple
