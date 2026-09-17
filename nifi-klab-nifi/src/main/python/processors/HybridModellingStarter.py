@@ -13,6 +13,7 @@ from rasterio.vrt import WarpedVRT
 from rasterio.merge import merge
 from rasterio.enums import Resampling
 from rasterio.warp import transform_bounds
+from rasterio.windows import from_bounds, transform as window_transform
 import scipy
 from typing import List
 import time
@@ -26,6 +27,7 @@ import itertools
 import os
 import sys
 from sys import exit
+import xml.etree.ElementTree as ET
 
 
 EUNIS_ML_STAC_COLLECTION_ID = "EU_modelV2-1-MECE" ## <- Change this to v3 once  made available by Manu
@@ -100,29 +102,35 @@ class HybridModellingStarter(FlowFileTransform):
     def getPropertyDescriptors(self):
         return self.descriptors
 
+    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None, raster_code_mapping:dict=None)->pd.DataFrame:
+        cm = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
+        interest = cm.shape[1] - 3
 
-    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None)->pd.DataFrame:
-        cm1 = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
-        classes = cm1.iloc[2].tolist()
-        classes = [x for x in classes if str(x) != 'nan'and "User" not in str(x)]
+        self.logger.info("Found Interest to be: " + str(interest))
 
-        data = []
-        for i in range(cm1.shape[1]):
-            for j in range(cm1.shape[0]):
-                ref = cm1.iloc[2][i]
-                pred = cm1.iloc[j][1]
+        reference = cm.iloc[2, 2:2 + interest].tolist()
 
-                if ref in classes and pred in classes:
-                    freq = cm1.iloc[i][j]
+        # Reference classes are in rows 3:9
+        predicted = cm.iloc[3:3 + interest, 1].tolist()
 
-                    data.append({
-                        "reference": ref, "predicted": pred, "frequency": freq
-                    })
+        # Actual confusion-matrix values
+        counts = cm.iloc[3:3 + interest, 2: 2 + interest].copy()
 
-        return pd.DataFrame(data)
+        # Give it proper labels
+        counts.index = reference
+        counts.columns = predicted
+
+        # Convert strings -> raster codes
+        counts.index = counts.index.map(raster_code_mapping)
+        counts.columns = counts.columns.map(raster_code_mapping)
+
+        # Make sure values are numeric
+        counts = counts.apply(pd.to_numeric)
+        self.logger.info(counts.head(20).to_string())
+        return counts
 
 
-    def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
+    def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined", raster_code_mapping=None):
         """
         # description
         #----------------------------------------------------------------------------#
@@ -192,27 +200,6 @@ class HybridModellingStarter(FlowFileTransform):
         sheet_name = "Level"+str(typology_level)+"Results"
         self.logger.info("Fetching sheet " + sheet_name + " from the Confusion Matrix Excel")
 
-        cm1 = self.confusion_matrix_preprocessing(matrix1, sheet_name=sheet_name)
-        cm2 = self.confusion_matrix_preprocessing(matrix2, sheet_name=sheet_name)
-
-        self.logger.info(cm2.head().to_string())
-        self.logger.info(cm1.head().to_string())
-
-        # exit if the inputs are not matching
-        if cm1.shape != cm1.shape:
-            self.logger.error("confusion matrices have different numbers of rows/columns")
-            return False
-
-        # check column names of cm1
-        if not all(np.isin(cm1.columns,["reference","predicted","frequency"])):
-            self.logger.error("confusion matrix for map 1 lacks needed columns")
-            return False
-
-        # check column names of cm2
-        if not all(np.isin(cm2.columns,["reference","predicted","frequency"])):
-            self.logger.error("confusion matrix for map 1 lacks needed columns")
-            return False
-
         # access map 1
         try:
             m1_ds = rt.open(map1)
@@ -240,76 +227,81 @@ class HybridModellingStarter(FlowFileTransform):
 
         # mapped class identifiers
         uc = np.unique(np.concat([m1,m2]))
-        uc = uc[~np.isnan(uc)]
+        uc = uc[~np.isnan(uc)]  ## <- Here the classes like 100101, 100102 so on and so forth
+
+        cm1 = self.confusion_matrix_preprocessing(matrix1, sheet_name=sheet_name, raster_code_mapping=raster_code_mapping)
+        cm2 = self.confusion_matrix_preprocessing(matrix2, sheet_name=sheet_name, raster_code_mapping=raster_code_mapping)
+
+        classes = cm1.index.union(cm2.index).union(pd.Index(uc.astype(int)))
+        cm1 = cm1.reindex(index=classes,columns=classes,fill_value=0)
+        cm2 = cm2.reindex(index=classes,columns=classes,fill_value=0)
+
 
         # mean proportion of pixels per class across the target maps
-        ma = ((ndsum(m1 > 0, m1, uc) + ndsum(m2 > 0, m2, uc)) / 2) / m1.size
+        ma = ((ndsum(m1 > 0, m1, uc) + ndsum(m2 > 0, m2, uc)) / 2) / m1.size  ## For each class, average number of pixels
         ma = pd.DataFrame({"prior":ma})
-        ma.index = [cm1.index[int(i-1)] for i in uc]
+        ma.index = [int(i) for i in uc] ## prottek ta classes er corresponding probability ta store kore akta dataframe banalam
+        ma = ma.reindex(classes, fill_value=0)
+        self.logger.info(ma.head().to_string())
 
-        # define potential combinations of classes
-        comb = pd.DataFrame(itertools.product(cm1.index,cm1.index), columns=["A","B"])
-        comb["A_id"] = 0
-        comb["B_id"] = 0
+        cm1_prob = cm1.div(cm1.sum(axis=1).replace(0, np.nan), axis=0).fillna(0)
+        cm2_prob = cm2.div(cm2.sum(axis=1).replace(0, np.nan), axis=0).fillna(0)
 
-        # add grid ID for each map
-        for x in range(0,cm1.shape[0]):
-            comb.loc[comb['A'] == cm1.index[x],'A_id'] = x+1
-            comb.loc[comb['B'] == cm1.index[x],'B_id'] = x+1
+        comb = pd.DataFrame(itertools.product(uc, uc), columns=["A", "B"])
+
+        self.logger.info(comb.head().to_string())
+
 
         # estimate likely class per combination
         #----------------------------------------------------------------------------#
 
-        s = []
-        for x in cm1.index:
-            p = ma.loc[x].values
-            a = np.array(cm1.loc[x,comb["A"].values]).flatten()
-            b = np.array(cm2.loc[x,comb["B"].values]).flatten()
-            s += [p * a * b]
+        ### cm1: confusion matrix 1, cm2: confusion matrix 2, ma: another dataframe with all the classes as index and the value as the probabilities of classes
+        scores = []
+        for x in ma.index:
+            p = ma.loc[x, "prior"]
+            a = cm1_prob.loc[x, comb["A"].values].to_numpy()
+            b = cm2_prob.loc[x, comb["B"].values].to_numpy()
+            scores.append(p * a * b)
 
         # compile results
-        scores = pd.DataFrame(s).T
+        scores = pd.DataFrame(scores).T
         scores.columns = cm1.index
 
         # normalize by row
-        scores = scores.div(scores.sum(axis=1), axis=0)
-
-        del p, a, b, s
+        row_sums = scores.sum(axis=1)
+        scores = scores.div(row_sums.replace(0, np.nan), axis=0).fillna(0)
 
         # reclassify
         #----------------------------------------------------------------------------#
 
         # output classified map
-        oa = np.zeros((m1_ds.height,m1_ds.width), dtype="int32")
+        height, width = m1.shape
+        oa = np.zeros((height, width), dtype="int32")
+        ca = np.zeros((len(classes), height, width), dtype="float32")
 
-        # output stack of class confidences
-        ca = np.zeros((m1_ds.height,m1_ds.width,len(cm1.index)), dtype="float32")
+        for row_idx in range(comb.shape[0]):
+            A_val = comb["A"].iloc[row_idx]
+            B_val = comb["B"].iloc[row_idx]
 
-        for x in range(0,comb.shape[0]):
+            row_scores = scores.iloc[row_idx]
+            if row_scores.sum() == 0:
+                continue  # this (A,B) combo never appeared in the confusion matrices -> no evidence, skip
 
-            # target pixels
-            i = np.where((m1 == comb["A_id"].values[x]) &
-                        (m1 == comb["A_id"].values[x]))
-            if len(i[0]) == 0:
-                next
+            # pixels where map1 == A AND map2 == B (fixed: was m1==... & m1==... in the original)
+            mask = (m1 == A_val) & (m2 == B_val)
+            if not mask.any():
+                continue
 
-            # identify most likely class
-            oa[i] = np.where(cm1.index == scores.iloc[x].idxmax())[0][0]
+            best_class = row_scores.idxmax()  # actual class code, not positional index
+            oa[mask] = best_class
+            ca[:, mask] = row_scores.to_numpy()[:, np.newaxis]
 
-            # record class confidences
-            ca[i[0],i[1],:] = list(scores.iloc[x])
+        # --- Recover pixels valid in only one map ---
+        only_m1 = ~np.isnan(m1) & np.isnan(m2)
+        oa[only_m1] = m1[only_m1]
 
-            del i
-
-        # recover pixels classified in map 1 but not 2
-        i = np.where(~np.isnan(m1) & np.isnan(m2))
-        if len(i[0] > 0):
-            oa[i] = m1[i]
-
-        # recover pixels classified in map 2 but not 1
-        i = np.where(np.isnan(m1) & ~np.isnan(m2))
-        if len(i[0] > 0):
-            oa[i] = m2[i]
+        only_m2 = np.isnan(m1) & ~np.isnan(m2)
+        oa[only_m2] = m2[only_m2]
 
         # define outputs and export
         #----------------------------------------------------------------------------#
@@ -319,23 +311,31 @@ class HybridModellingStarter(FlowFileTransform):
 
         # export classified map
         self.logger.info("Writing the Final Classes")
-        oname = f'{output}/{name}-hybridMap_classification.tif'
+        oname = f'{output}/hybridMap_classification.tif'
         ods = rt.open(oname, "w", **p)
-        ods.write(oa, index=1)
+        ods.write(oa, indexes=1)
         ods.close()
 
         # export confidence map
         self.logger.info("Writing Confidence Map")
-        oname = f'{output}/{name}-hybridMap_confidence.tif'
+        oname = f'{output}/hybridMap_confidence.tif'
         p.update(count=len(cm1.index)) # update band count
         ods = rt.open(oname, "w", **p)
-        ods.write(oa)
+        ods.write(ca)
         ods.close()
 
         self.logger.info("Successfully generated Hybrid Map and Confidence Maps")
         return True
 
-    def make_confusion_matrix_request(self, client_id:str, client_secret:str, asset_hrefs: List[str], eo_type:str, collection_id:str=RDM_COLLECTION_ID, output_file_path:str="file.xlsx"):
+    def make_confusion_matrix_request(self,
+                                        client_id:str,
+                                        client_secret:str,
+                                        asset_hrefs: List[str],
+                                        eo_type:str,
+                                        collection_id:str=RDM_COLLECTION_ID,
+                                        output_excel_file_path:str="file.xlsx",
+                                        output_parquet_file_path:str="file.parquet",
+                                        fetch_mapping_from_csv:bool=True):
 
         response = requests.post(
             CDSE_OIDC_ENDPOINT,
@@ -348,8 +348,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         response.raise_for_status()
         access_token = response.json()["access_token"]
-
-        self.logger.info(access_token)
+        self.logger.info("Successfully Retrieved the Access Token from CDSE Endpoint")
         url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix"
 
         payload = {
@@ -371,6 +370,8 @@ class HybridModellingStarter(FlowFileTransform):
         self.logger.info("Polling the Status of the Request")
         status_url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix/{reqdID}"
         excelResultUrl = None
+        parquetResultUrl = None
+        qmlResultUrl = None
 
         while 1:
             job = requests.get(status_url, headers=headers)
@@ -378,26 +379,66 @@ class HybridModellingStarter(FlowFileTransform):
             job_details = job.json()
             if job_details.get("status") == "completed":
                 self.logger.info("Confusion Matrix Generation Request handled successfully")
+                self.logger.info(str(job_details))
                 excelResultUrl = job_details.get("excelResultUrl")
+                parquetResultUrl = job_details.get("parquetResultUrl")
+                qmlResultUrl = job_details.get("qmlUrl")
                 break
             else:
                 self.logger.info("Request still processing. Waiting for 10 seconds before checking again...")
                 time.sleep(10)
 
-        if excelResultUrl is None:
-            self.logger.error("Couldn't find the Excel Result in the RDM Response")
+        if excelResultUrl is None or parquetResultUrl is None:
+            self.logger.error("Couldn't find the Excel Result or the Parquet Result in the RDM Response")
             return False
 
         with requests.get(excelResultUrl, stream=True) as response:
             response.raise_for_status()
 
-            with open(output_file_path, "wb") as f:
+            with open(output_excel_file_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
 
-        self.logger.info(f"Downloaded Confusion Matrix (.xlsx) to {output_file_path}")
-        return True
+        self.logger.info(f"Downloaded Confusion Matrix (.xlsx) to {output_excel_file_path}")
+
+        with requests.get(parquetResultUrl, stream=True) as response:
+            response.raise_for_status()
+
+            with open(output_parquet_file_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+        self.logger.info(f"Downloaded Parquet file (.parquet) to {output_parquet_file_path}")
+
+        mapping = None
+        if fetch_mapping_from_csv:
+            with requests.get(qmlResultUrl, stream=True) as response:
+                response.raise_for_status()
+
+                with tempfile.TemporaryFile() as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                    f.seek(0)
+
+                    self.logger.info(f"Downloaded CSV Raster Mappings from {qmlResultUrl}, Starting to parse the CSV file to get the raster code mappings")
+                    df = pd.read_csv(f)
+                    self.logger.info("EO Type provided: " + eo_type)
+
+                    eo_type = eo_type.strip().upper()
+                    valid_types = df["EOTYPE"].str.upper().unique().tolist()
+                    if eo_type not in valid_types:
+                        raise ValueError(f"eo_type must be one of {valid_types}, got '{eo_type}'")
+
+                    filtered = df[df["EOTYPE"].str.upper() == eo_type]
+
+                    # raster_value comes in as float (e.g. 10101.0), so cast for a clean int key
+                    mapping = dict(zip(filtered["name"], filtered["raster_value"].astype(int)))
+
+        return True, mapping
 
     def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
@@ -410,47 +451,96 @@ class HybridModellingStarter(FlowFileTransform):
         return local_path
 
 
-    def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None, nodata_value: float = None, resampling: Resampling = Resampling.nearest):
+    def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None,
+                     nodata_value: float = None, resampling: Resampling = Resampling.nearest,
+                     target_resolution: float = 0.01):
 
         self.logger.info("Proceeding to Merging the Tiffs")
+        target_crs = rasterio.crs.CRS.from_epsg(4326)
+        res = (target_resolution, target_resolution)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
             local_paths = [self.download_tiff(href, tmp_dir) for href in hrefs]
-
-            # Determine target CRS from the first asset
-            with rasterio.open(local_paths[0]) as first_ds:
-                target_crs = first_ds.crs
-                if nodata_value is None:
+            if nodata_value is None:
+                with rasterio.open(local_paths[0]) as first_ds:
                     nodata_value = first_ds.nodata
 
-            self.logger.info(f"Target CRS (from first asset): {target_crs}")
+            self.logger.info(f"Target CRS: {target_crs}, target resolution: {res} deg")
 
             out_bounds = None
             if bbox is not None:
-                out_bounds = transform_bounds("EPSG:4326", target_crs, *bbox)
-                self.logger.info(f"Forcing output bounds to bbox (reprojected): {out_bounds}")
+                # bbox is already in EPSG:4326, so no reprojection needed here
+                out_bounds = tuple(bbox)
+                self.logger.info(f"Forcing output bounds to bbox: {out_bounds}")
 
-            # Open all datasets, wrapping any mismatched-CRS ones in a WarpedVRT
+            # Open all datasets. Always wrap in a WarpedVRT so both CRS
+            # reprojection (if needed) and resampling to the target
+            # resolution are enforced uniformly, even for inputs that are
+            # already in EPSG:4326 but at a different pixel size.
             datasets = []
             for path in local_paths:
                 ds = rasterio.open(path)
-                if ds.crs != target_crs:
-                    vrt = WarpedVRT(ds, crs=target_crs, resampling=resampling,nodata=nodata_value)
+                needs_reproject = ds.crs != target_crs
+                needs_resample = (
+                    round(abs(ds.transform.a), 8) != target_resolution
+                    or round(abs(ds.transform.e), 8) != target_resolution
+                )
+
+                if needs_reproject or needs_resample:
+                    vrt = WarpedVRT(
+                        ds,
+                        crs=target_crs,
+                        resampling=resampling,
+                        nodata=nodata_value,
+                        resolution=res,
+                    )
                     datasets.append(vrt)
+                    self.logger.info(
+                        f"{path}: reproject={needs_reproject}, resample={needs_resample} "
+                        f"(orig res=({ds.transform.a}, {ds.transform.e}))"
+                    )
                 else:
                     datasets.append(ds)
 
             try:
-                # Merge into a single mosaic array + transform,
-                # forcing bounds to the full bbox so uncovered areas
-                # are filled with nodata rather than cropped away
+                # Merge into a single mosaic array + transform, forcing both
+                # the pixel resolution and (optionally) output bounds so
+                # uncovered areas are filled with nodata rather than cropped away
                 mosaic, out_transform = merge(
                     datasets,
                     bounds=out_bounds,
+                    res=res,
                     nodata=nodata_value,
                     resampling=resampling,
                 )
+
+                # merge() snaps bounds to the pixel grid, which can leave
+                # extra rows/cols beyond the exact bbox. Crop back to bbox.
+                if out_bounds is not None:
+                    self.logger.info("Rounding off per the bbox bounds")
+                    window = from_bounds(*out_bounds, transform=out_transform)
+                    # floor the offset, ceil the size, so we never crop into
+                    # bbox-covered data — only trim what's truly outside it
+                    window = window.round_offsets(op="floor").round_lengths(op="ceil")
+
+                    col_off, row_off = int(window.col_off), int(window.row_off)
+                    width, height = int(window.width), int(window.height)
+
+                    # clamp to array bounds just in case rounding overshoots
+                    col_off = max(col_off, 0)
+                    row_off = max(row_off, 0)
+                    width = min(width, mosaic.shape[2] - col_off)
+                    height = min(height, mosaic.shape[1] - row_off)
+
+                    cropped_window = rasterio.windows.Window(col_off, row_off, width, height)
+                    mosaic = mosaic[:, row_off:row_off + height, col_off:col_off + width]
+                    out_transform = window_transform(cropped_window, out_transform)
+
+                    self.logger.info(
+                        f"Cropped mosaic to exact bbox: shape={mosaic.shape}, "
+                        f"transform={out_transform}"
+                    )
 
                 out_meta = datasets[0].meta.copy()
                 out_meta.update({
@@ -542,13 +632,19 @@ class HybridModellingStarter(FlowFileTransform):
             case "GET":
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
 
-
-
-        ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + asset_href[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
+        ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + item[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
 
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
         self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox)
-        success = self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/ml_confusion_matrix.xlsx")
+        success, raster_code_mapping = self.make_confusion_matrix_request(
+                                client_id,
+                                client_secret,
+                                ml_item_hrefs ,
+                                eo_type,
+                                RDM_COLLECTION_ID,
+                                "excel/ml_confusion_matrix.xlsx",
+                                "parquet/ml_parquet.parquet",
+                                True)
         if not success:
             self.logger.error("Confusion Matrix wasn't generated successfully for Machine Learning Model Outputs")
             return FlowFileTransformResult(relationship="failure")
@@ -557,7 +653,16 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
         self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox)
-        success = self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/rb_confusion_matrix.xlsx")
+        success, _ = self.make_confusion_matrix_request(
+                        client_id,
+                        client_secret,
+                        rb_item_hrefs ,
+                        eo_type,
+                        RDM_COLLECTION_ID,
+                        "excel/rb_confusion_matrix.xlsx",
+                        "parquet/rb_parquet.parquet",
+                        False)
+
         if not success:
             self.logger.info("Confusion Matrix wasn't generated successfully for Rule Based Model Outputs")
             return FlowFileTransformResult(relationship="failure")
@@ -571,8 +676,9 @@ class HybridModellingStarter(FlowFileTransform):
             map2="raster/rb_map.tif",
             matrix1="excel/ml_confusion_matrix.xlsx",
             matrix2="excel/rb_confusion_matrix.xlsx",
-            output=".",
-            name="hybrid"
+            output="raster/",
+            name="hybrid",
+            raster_code_mapping=raster_code_mapping
         )
 
         if not result:
@@ -581,6 +687,3 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("Successfully generated Hybrid Maps and Confidence Maps")
         return FlowFileTransformResult(relationship="success")
-
-
-
