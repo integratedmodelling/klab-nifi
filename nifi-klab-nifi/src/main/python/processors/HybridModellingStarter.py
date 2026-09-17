@@ -308,6 +308,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         # metadata profile
         p = m1_ds.profile.copy()
+        p.update(nodata=0)
 
         # export classified map
         self.logger.info("Writing the Final Classes")
@@ -633,6 +634,11 @@ class HybridModellingStarter(FlowFileTransform):
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
 
         ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + item[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
+
+
+        if len(ml_item_hrefs) == 0 or len(rb_item_hrefs) == 0:
+            self.logger.error("The search over ML STAC or the RB STAC returned no Items over the specified Spatio Temporal Bounds")
+            return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
         self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox)
