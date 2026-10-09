@@ -27,14 +27,15 @@ import itertools
 import os
 import sys
 from sys import exit
+import json
 import xml.etree.ElementTree as ET
 
 
-EUNIS_ML_STAC_COLLECTION_ID = "EU_modelV2-1-MECE" ## <- Change this to v3 once  made available by Manu
-GET_ML_STAC_COLLECTION_ID = "IUCNGET-V2-MECE"
+EUNIS_ML_STAC_COLLECTION_ID = "EUNIS2021plus-V311-extent" ## <- Change this to v3 once  made available by Manu
+GET_ML_STAC_COLLECTION_ID = "IUCNGET-V317-extent"
 VITO_STAC_CATALOG = "https://catalogue.weed.apex.esa.int"
 IM_STAC_CATALOG = "https://stac.integratedmodelling.org"
-RB_STAC_COLLECTION_ID = "global_ecosystem_typology"
+RB_STAC_COLLECTION_ID = "et_rb_v2"
 HYBRID_STAC_API_COLLECTION_ID = "hybrid_modelling"
 CDSE_OIDC_ENDPOINT = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 RDM_BASE_URL = "https://weed-api.iiasa.ac.at"
@@ -61,7 +62,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.bbox = PropertyDescriptor(
             name = "Bounding Box",
-            description = "Bounding Box of the Hybrid Request (minX, minY, maxX, maxY)",
+            description = "Bounding Box of the Hybrid Request (minX, minY, maxX, maxY) or a GeoJSON",
             validators = [StandardValidators.NON_EMPTY_VALIDATOR],
             required=False
         )
@@ -333,6 +334,7 @@ class HybridModellingStarter(FlowFileTransform):
                                         client_secret:str,
                                         asset_hrefs: List[str],
                                         eo_type:str,
+                                        geometry:str,
                                         collection_id:str=RDM_COLLECTION_ID,
                                         output_excel_file_path:str="file.xlsx",
                                         output_parquet_file_path:str="file.parquet",
@@ -355,7 +357,8 @@ class HybridModellingStarter(FlowFileTransform):
         payload = {
             "collectionId": collection_id,
             "stacTifUrls": asset_hrefs,
-            "eoType": eo_type
+            "eoType": eo_type,
+            "polygonGeoJson": geometry
         }
 
         headers = {
@@ -592,8 +595,69 @@ class HybridModellingStarter(FlowFileTransform):
             self.logger.error("BBOX shouldn't be null")
             return FlowFileTransformResult(relationship="failure")
 
-        bbox = bbox.split(",")
-        bbox = [float(item) for item in bbox]
+        try:
+            # Try GeoJSON first
+            bbox_json = json.loads(bbox)
+
+            if isinstance(bbox_json, dict) and "type" in bbox_json:
+                geojson_type = bbox_json["type"]
+
+                if geojson_type == "Feature":
+                    geom = bbox_json.get("geometry")
+                elif geojson_type in ["Polygon", "MultiPolygon", "Point", "LineString"]:
+                    geom = bbox_json
+                else:
+                    raise ValueError(f"Unsupported GeoJSON type: {geojson_type}")
+
+                # Flatten all coordinate pairs and calculate bbox
+                def extract_coords(obj):
+                    if (
+                        isinstance(obj, list)
+                        and len(obj) >= 2
+                        and isinstance(obj[0], (int, float))
+                        and isinstance(obj[1], (int, float))
+                    ):
+                        yield obj
+                    else:
+                        for item in obj:
+                            yield from extract_coords(item)
+
+
+                coordinates = list(extract_coords(geom["coordinates"]))
+                xs = [coord[0] for coord in coordinates]
+                ys = [coord[1] for coord in coordinates]
+
+                bbox_list = [
+                    min(xs),
+                    min(ys),
+                    max(xs),
+                    max(ys)
+                ]
+                geometry = json.dumps(geom)
+
+            else:
+                raise ValueError("Not GeoJSON")
+
+        except (json.JSONDecodeError, ValueError, KeyError, TypeError):
+            self.logger.info("Found the BBOX passed not to be a GeoJSON")
+
+            try:
+                bbox_list = [float(item.strip()) for item in bbox.split(",")]
+                minX, minY, maxX, maxY = bbox_list
+                geojson = {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [minX, minY],
+                        [maxX, minY],
+                        [maxX, maxY],
+                        [minX, maxY],
+                        [minX, minY]
+                    ]]
+                }
+
+            except ValueError:
+                self.logger.error(f"Invalid BBOX: {bbox}")
+                return FlowFileTransformResult(relationship="failure")
 
         client_id = context.getProperty(self.oidc_client_id).getValue()
         client_secret = context.getProperty(self.oidc_client_secret).getValue()
@@ -603,34 +667,44 @@ class HybridModellingStarter(FlowFileTransform):
 
         match eo_type.upper():
             case "EUNIS":
-                ml_items =vito_stac.search(
+                ml_items = list(vito_stac.search(
                             collections=[EUNIS_ML_STAC_COLLECTION_ID],
-                            bbox=bbox,
-                            limit = 1000).items()
+                            bbox=bbox_list,
+                            limit = 1000).items())
             case "GET":
-                ml_items =vito_stac.search(
+                ml_items = list(vito_stac.search(
                             collections=[GET_ML_STAC_COLLECTION_ID],
-                            bbox=bbox,
-                            limit = 1000).items()
+                            bbox=bbox_list,
+                            limit = 1000).items())
+
             case _:
                 raise ValueError("Invalid eo_type. Must be 'EUNIS' or 'GET'.")
 
-        ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
 
+        ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
+        self.logger.info("Found " + str(len(ml_item_hrefs)) + "from the ML search" )
 
         '''
         Rule Based Outputs are guaranteed to be in 4326
         '''
-        rb_items = im_stac.search(
+        rb_items = list(im_stac.search(
             collections=[RB_STAC_COLLECTION_ID],
-            bbox=bbox,
-            limit = 1000).items()
+            bbox=bbox_list,
+            limit = 1000).items())
 
+        self.logger.info("Found " + str(len(rb_items)) + "from the Rule Based search" )
 
         match eo_type:
             case "EUNIS":
+                self.logger.info("Found the EO Type to be EUNIS")
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "eunis" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
+
             case "GET":
+                self.logger.info("Found the EO Type to be GET")
+                for item in rb_items:
+                    for asset in item.assets.values():
+                        self.logger.info(asset.extra_fields.get("klab.observable.semantics", "NONE"))
+
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
 
         ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + item[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
@@ -641,12 +715,13 @@ class HybridModellingStarter(FlowFileTransform):
             return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
-        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox)
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list)
         success, raster_code_mapping = self.make_confusion_matrix_request(
                                 client_id,
                                 client_secret,
                                 ml_item_hrefs ,
                                 eo_type,
+                                json.dumps(geojson),
                                 RDM_COLLECTION_ID,
                                 "excel/ml_confusion_matrix.xlsx",
                                 "parquet/ml_parquet.parquet",
@@ -658,12 +733,13 @@ class HybridModellingStarter(FlowFileTransform):
 
 
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
-        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox)
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list)
         success, _ = self.make_confusion_matrix_request(
                         client_id,
                         client_secret,
                         rb_item_hrefs ,
                         eo_type,
+                        json.dumps(geojson),
                         RDM_COLLECTION_ID,
                         "excel/rb_confusion_matrix.xlsx",
                         "parquet/rb_parquet.parquet",
