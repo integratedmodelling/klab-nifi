@@ -701,13 +701,28 @@ class HybridModellingStarter(FlowFileTransform):
 
             case "GET":
                 self.logger.info("Found the EO Type to be GET")
-                for item in rb_items:
-                    for asset in item.assets.values():
-                        self.logger.info(asset.extra_fields.get("klab.observable.semantics", "NONE"))
+                # TEMPORARY: et_rb_v2 is currently confirmed to contain only IUCN GET.
+                # Select the same way as ML, without requiring semantic metadata.
+                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values()]
 
-                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
+                # FUTURE: Restore semantic filtering when RB STAC assets expose
+                # the klab.observable.semantics field consistently.
+                # rb_item_hrefs = [
+                #     asset.href
+                #     for item in rb_items
+                #     for asset in item.assets.values()
+                #     if "iucn" in str(asset.extra_fields.get(
+                #         "klab.observable.semantics", ""
+                #     )).lower()
+                # ]
+                self.logger.info(f"Selected {len(rb_item_hrefs)} RB asset URLs for GET")
 
-        ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + item[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
+        # Do not rewrite valid HTTP(S) URLs; only convert recognized S3 URLs.
+        try:
+            ml_item_hrefs = [self.resolve_ml_asset_url(href) for href in ml_item_hrefs]
+        except ValueError as exc:
+            self.logger.error(f"Failed to resolve ML asset URL: {exc}")
+            return FlowFileTransformResult(relationship="failure")
 
 
         if len(ml_item_hrefs) == 0 or len(rb_item_hrefs) == 0:
