@@ -444,6 +444,26 @@ class HybridModellingStarter(FlowFileTransform):
 
         return True, mapping
 
+    @staticmethod
+    def resolve_ml_asset_url(href: str) -> str:
+        """Keep HTTP(S) URLs intact; translate recognized CloudFerro S3 URLs."""
+        parsed = urlsplit(href)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return href
+        if parsed.scheme != "s3" or not parsed.netloc:
+            raise ValueError(f"Unsupported ML asset URL scheme or host: {href}")
+
+        # Retain the bucket and key, as in the original CloudFerro conversion.
+        # The routing convention must be validated against the live STAC assets.
+        s3_path = href[5:]
+        if "waw3-1" in href:
+            base = "https://s3.waw3-1.cloudferro.com/swift/v1/"
+        elif "waw4-1" in href:
+            base = "https://s3.waw4-1.cloudferro.com/swift/v1/"
+        else:
+            raise ValueError(f"Unknown CloudFerro region in S3 URL: {href}")
+        return base + s3_path
+
     def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
         local_path = os.path.join(dest_dir, os.path.basename(href.split("?")[0]))
