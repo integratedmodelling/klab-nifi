@@ -29,6 +29,7 @@ import sys
 from sys import exit
 import json
 import xml.etree.ElementTree as ET
+from urllib.parse import urlsplit
 
 
 EUNIS_ML_STAC_COLLECTION_ID = "EUNIS2021plus-V311-extent" ## <- Change this to v3 once  made available by Manu
