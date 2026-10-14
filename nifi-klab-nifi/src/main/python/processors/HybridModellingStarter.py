@@ -590,6 +590,8 @@ class HybridModellingStarter(FlowFileTransform):
         self.logger.info(f"Merged output written to {output_path}")
 
     def transform(self, context, flowfile):
+        # Mark execution of a FlowFile, not merely NiFi processor initialization.
+        self.logger.info("========== HYBRID MODELLING: PROCESSING STARTED ==========")
 
         if flowfile is None:
             self.logger.error("Incoming flowfile is null")
@@ -683,6 +685,7 @@ class HybridModellingStarter(FlowFileTransform):
         client_id = context.getProperty(self.oidc_client_id).getValue()
         client_secret = context.getProperty(self.oidc_client_secret).getValue()
 
+        self.logger.info("========== HYBRID MODELLING: STAC SEARCH STARTED ==========")
         vito_stac = pystac_client.Client.open(VITO_STAC_CATALOG)
         im_stac = pystac_client.Client.open(IM_STAC_CATALOG)
 
@@ -750,6 +753,7 @@ class HybridModellingStarter(FlowFileTransform):
             self.logger.error("The search over ML STAC or the RB STAC returned no Items over the specified Spatio Temporal Bounds")
             return FlowFileTransformResult(relationship="failure")
 
+        self.logger.info("========== HYBRID MODELLING: ML PROCESSING STARTED ==========")
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
         self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list)
         success, raster_code_mapping = self.make_confusion_matrix_request(
@@ -768,6 +772,7 @@ class HybridModellingStarter(FlowFileTransform):
 
 
 
+        self.logger.info("========== HYBRID MODELLING: RB PROCESSING STARTED ==========")
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
         self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list)
         success, _ = self.make_confusion_matrix_request(
@@ -788,6 +793,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
 
+        self.logger.info("========== HYBRID MODELLING: HYBRID MAP GENERATION STARTED ==========")
         result = self.generate_hybrid_maps(
             typology_level = int(context.getProperty(self.typology_level).getValue()),
             map1="raster/ml_map.tif",
@@ -804,4 +810,5 @@ class HybridModellingStarter(FlowFileTransform):
             return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Successfully generated Hybrid Maps and Confidence Maps")
+        self.logger.info("========== HYBRID MODELLING: PROCESSING COMPLETED SUCCESSFULLY ==========")
         return FlowFileTransformResult(relationship="success")
