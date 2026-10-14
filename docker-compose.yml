@@ -12,13 +12,18 @@ services:
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
       - .\nifi-klab-nifi\src\main\python:/opt/nifi/py_prcs
-      - $HOME\.klab:/home/nifi/.klab
+      - C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
+      - .\excel:/opt/nifi/nifi-current/excel
+      - .\raster:/opt/nifi/nifi-current/raster
+      - .\parquet:/opt/nifi/nifi-current/parquet
+      - ./nifi_conf:/opt/nifi/nifi-current/conf
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
       - NIFI_INPUT_DIR=./nifi_input
       - NIFI_OUTPUT_DIR=./nifi_output
       - NIFI_PY_SCRIPTS_DIR=./py_scripts
-      - NIFI_KLAB_DIR=./klab
+      - UV_HTTP_TIMEOUT=300
+      - UV_HTTP_RETRIES=5
     entrypoint: >
       bash -c "
         echo 'Copying custom NARs to lib...' &&
