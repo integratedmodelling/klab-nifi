@@ -10,7 +10,7 @@ services:
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
       - ./nifi-klab-nifi/src/main/python:/opt/nifi/py_prcs
-      - #C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
+      #- C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
       # Environment variable: KLAB_HOME in their local .env file
       - type: bind
         source: ${KLAB_HOME}
@@ -24,8 +24,8 @@ services:
       - NIFI_INPUT_DIR=./nifi_input
       - NIFI_OUTPUT_DIR=./nifi_output
       - NIFI_PY_SCRIPTS_DIR=./py_scripts
-      - UV_HTTP_TIMEOUT: "300"
-      - UV_HTTP_RETRIES: "5"
+      - UV_HTTP_TIMEOUT=300
+      - UV_HTTP_RETRIES=5
 
     entrypoint: >
       bash -c "
