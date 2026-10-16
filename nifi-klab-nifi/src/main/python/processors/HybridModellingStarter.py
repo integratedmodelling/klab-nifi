@@ -75,6 +75,14 @@ class HybridModellingStarter(FlowFileTransform):
             required=False
         )
 
+        self.year = PropertyDescriptor(
+            name="Reference Year",
+            description="Calendar year (YYYY) used to select both ML and RB STAC items. "
+                        "May be provided as a FlowFile attribute named year.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
         self.typology_level = PropertyDescriptor(
             name = "Typology Level",
             description = "Typology Level 1, 2 or 3, Generic to Specific Heirarchical Ordering",
@@ -589,6 +597,70 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info(f"Merged output written to {output_path}")
 
+    @staticmethod
+    def item_matches_year(item, target_year: int) -> tuple[bool, str]:
+        """Validate calendar year from STAC Item temporal metadata.
+
+        A range crossing a year boundary is deliberately rejected rather than
+        assuming all pixels represent the requested year. The server-side
+        datetime search only ensures temporal *intersection*, not this rule.
+        """
+        props = item.properties or {}
+        start = props.get("start_datetime")
+        end = props.get("end_datetime")
+        instant = props.get("datetime")
+        year_value = props.get("year")
+
+        def parse_dt(value):
+            if isinstance(value, datetime):
+                dt = value
+            elif isinstance(value, str):
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            else:
+                raise ValueError(f"Invalid STAC datetime: {value!r}")
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        try:
+            if start is not None or end is not None:
+                if start is None or end is None:
+                    return False, "incomplete start_datetime/end_datetime"
+                first, last = parse_dt(start), parse_dt(end)
+                if first > last:
+                    return False, "start_datetime later than end_datetime"
+                within = first.year == target_year and last.year == target_year
+                source = f"range {first.isoformat()}..{last.isoformat()}"
+            elif instant is not None:
+                observed = parse_dt(instant)
+                within = observed.year == target_year
+                source = f"datetime {observed.isoformat()}"
+            elif year_value is not None:
+                within = str(year_value).strip() == str(target_year)
+                source = f"properties.year={year_value}"
+            else:
+                return False, "missing temporal metadata"
+            if year_value is not None and str(year_value).strip() != str(target_year):
+                return False, f"conflicting properties.year={year_value}; {source}"
+            return within, source
+        except (TypeError, ValueError, OverflowError) as exc:
+            return False, f"invalid temporal metadata: {exc}"
+
+    def filter_items_for_year(self, items, target_year: int, label: str):
+        selected = []
+        for item in items:
+            matches, temporal_info = self.item_matches_year(item, target_year)
+            if matches:
+                selected.append(item)
+                self.logger.info(f"{label} STAC accepted item {item.id}: {temporal_info}")
+            else:
+                self.logger.info(f"{label} STAC skipped item {item.id}: {temporal_info}")
+        self.logger.info(
+            f"{label} STAC selection for year {target_year}: "
+            f"{len(selected)} of {len(items)} items accepted"
+        )
+        return selected
+
     def transform(self, context, flowfile):
         # Mark execution of a FlowFile, not merely NiFi processor initialization.
         self.logger.info("========== HYBRID MODELLING: PROCESSING STARTED ==========")
@@ -609,6 +681,22 @@ class HybridModellingStarter(FlowFileTransform):
         if eo_type.upper() not in ["GET","EUNIS"]:
             self.logger.error("eo_type should be one of EUNIS or GET")
             return FlowFileTransformResult(relationship="failure")
+
+        requested_year = context.getProperty(self.year).getValue()
+        if requested_year is None or not str(requested_year).strip():
+            requested_year = flowfile.getAttribute("year")
+        if requested_year is None or not str(requested_year).strip():
+            self.logger.error("Missing Reference Year: set processor property or FlowFile attribute 'year' (YYYY)")
+            return FlowFileTransformResult(relationship="failure")
+        try:
+            year = int(str(requested_year).strip())
+            if len(str(requested_year).strip()) != 4 or not (1900 <= year <= 2100):
+                raise ValueError("year must be four digits between 1900 and 2100")
+        except (TypeError, ValueError):
+            self.logger.error(f"Invalid Reference Year {requested_year!r}; expected YYYY")
+            return FlowFileTransformResult(relationship="failure")
+        year_datetime = f"{year}-01-01T00:00:00Z/{year}-12-31T23:59:59Z"
+        self.logger.info(f"HYBRID MODELLING: Reference Year={year}; STAC datetime={year_datetime}")
 
         bbox = context.getProperty(self.bbox).getValue()
         if bbox == None:
@@ -699,6 +787,7 @@ class HybridModellingStarter(FlowFileTransform):
                 ml_items = list(vito_stac.search(
                             collections=[GET_ML_STAC_COLLECTION_ID],
                             bbox=bbox_list,
+                            datetime=year_datetime,
                             limit = 1000).items())
 
             case _:
@@ -715,6 +804,11 @@ class HybridModellingStarter(FlowFileTransform):
             collections=[RB_STAC_COLLECTION_ID],
             bbox=bbox_list,
             limit = 1000).items())
+
+        rb_items = self.filter_items_for_year(rb_items, year, "RB")
+        if not rb_items:
+            self.logger.error(f"No RB STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Found " + str(len(rb_items)) + "from the Rule Based search" )
 
