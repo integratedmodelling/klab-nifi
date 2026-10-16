@@ -28,6 +28,7 @@ import os
 import sys
 from sys import exit
 import json
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
@@ -41,6 +42,10 @@ HYBRID_STAC_API_COLLECTION_ID = "hybrid_modelling"
 CDSE_OIDC_ENDPOINT = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 RDM_BASE_URL = "https://weed-api.iiasa.ac.at"
 RDM_COLLECTION_ID = "global_validation"
+
+# Approximately 30 m in latitude; both mosaics need the same pixel grid.
+# Choose explicitly to avoid the previous implicit 0.01-degree (~1.1 km) downsampling.
+HYBRID_RESOLUTION_DEGREES = 0.00026949458523586
 
 
 @use_case("Triggers Hybrid Modelling Pipeline combining outputs from Rule Based Models and Machine Learning Models")
@@ -107,13 +112,25 @@ class HybridModellingStarter(FlowFileTransform):
             sensitive=True # Sensitive Field
         )
 
-        self.descriptors = [self.bbox, self.eo_type, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
+        self.descriptors = [self.bbox, self.eo_type, self.year, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
 
     def getPropertyDescriptors(self):
         return self.descriptors
 
     def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None, raster_code_mapping:dict=None)->pd.DataFrame:
-        cm = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
+        with pd.ExcelFile(matrix) as workbook:
+            if sheet_name not in workbook.sheet_names:
+                detail = ""
+                if "ErrorMatrix" in workbook.sheet_names:
+                    error_df = pd.read_excel(workbook, sheet_name="ErrorMatrix", header=None)
+                    detail = f" RDM ErrorMatrix: {error_df.fillna('').astype(str).to_numpy().flatten()[:12].tolist()}"
+                raise ValueError(
+                    f"RDM workbook '{matrix}' lacks '{sheet_name}'. "
+                    f"Available sheets: {workbook.sheet_names}.{detail} "
+                    "Check the original STAC raster values and RDM encoding/coverage; "
+                    "changing the local mosaic resolution alone will not fix RDM."
+                )
+            cm = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
         interest = cm.shape[1] - 3
 
         self.logger.info("Found Interest to be: " + str(interest))
@@ -486,11 +503,19 @@ class HybridModellingStarter(FlowFileTransform):
 
     def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None,
                      nodata_value: float = None, resampling: Resampling = Resampling.nearest,
-                     target_resolution: float = 0.01):
+                     target_resolution: float = HYBRID_RESOLUTION_DEGREES):
 
         self.logger.info("Proceeding to Merging the Tiffs")
         target_crs = rasterio.crs.CRS.from_epsg(4326)
         res = (target_resolution, target_resolution)
+        # Diagnostic: identify the Python implementation and actual resolution
+        self.logger.info(
+            "HM_RUNTIME_DIAGNOSTIC_resampling_resolution"
+            f"module={__file__} "
+            f"target_resolution={target_resolution!r} "
+            f"constant={HYBRID_RESOLUTION_DEGREES!r} "
+            f"res={res!r}"
+        )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
@@ -498,6 +523,23 @@ class HybridModellingStarter(FlowFileTransform):
             if nodata_value is None:
                 with rasterio.open(local_paths[0]) as first_ds:
                     nodata_value = first_ds.nodata
+
+            # Report raw source codes BEFORE any warp/resampling. Sampling uses
+            # a decimated array and avoids reading large source TIFFs in full.
+            for source_path in local_paths:
+                with rasterio.open(source_path) as source:
+                    sample_shape = (min(512, source.height), min(512, source.width))
+                    sample = source.read(1, out_shape=sample_shape, masked=True,
+                                         resampling=Resampling.nearest)
+                    values, counts = np.unique(sample.compressed(), return_counts=True)
+                    common = sorted(zip(counts.tolist(), values.tolist()), reverse=True)[:15]
+                    self.logger.info(
+                        f"SOURCE RASTER {os.path.basename(source_path)}: "
+                        f"crs={source.crs} bounds={source.bounds} size={source.width}x{source.height} "
+                        f"resolution={source.res} dtype={source.dtypes[0]} "
+                        f"nodata={source.nodata} sample_valid={sample.count()} "
+                        f"sample_codes_by_count={[(v, n) for n, v in common]}"
+                    )
 
             self.logger.info(f"Target CRS: {target_crs}, target resolution: {res} deg")
 
@@ -595,6 +637,17 @@ class HybridModellingStarter(FlowFileTransform):
                 for ds in datasets:
                     ds.close()
 
+        with rasterio.open(output_path) as merged:
+            sample = merged.read(1, out_shape=(min(512, merged.height), min(512, merged.width)),
+                                 masked=True, resampling=Resampling.nearest)
+            codes, counts = np.unique(sample.compressed(), return_counts=True)
+            common = sorted(zip(counts.tolist(), codes.tolist()), reverse=True)[:15]
+            self.logger.info(
+                f"MERGED RASTER {output_path}: size={merged.width}x{merged.height} "
+                f"resolution={merged.res} bounds={merged.bounds} "
+                f"nodata={merged.nodata} sample_valid={sample.count()} "
+                f"sample_codes_by_count={[(v, n) for n, v in common]}"
+            )
         self.logger.info(f"Merged output written to {output_path}")
 
     @staticmethod
@@ -664,7 +717,7 @@ class HybridModellingStarter(FlowFileTransform):
     def transform(self, context, flowfile):
         # Mark execution of a FlowFile, not merely NiFi processor initialization.
         self.logger.info("========== HYBRID MODELLING: PROCESSING STARTED ==========")
-
+        self.logger.info("HM_RUNTIME_DIAGNOSTIC_: updated transform() executed")
         if flowfile is None:
             self.logger.error("Incoming flowfile is null")
             return FlowFileTransformResult(relationship="failure")
@@ -745,6 +798,7 @@ class HybridModellingStarter(FlowFileTransform):
                     max(ys)
                 ]
                 geometry = json.dumps(geom)
+                geojson = geom
 
             else:
                 raise ValueError("Not GeoJSON")
@@ -782,6 +836,7 @@ class HybridModellingStarter(FlowFileTransform):
                 ml_items = list(vito_stac.search(
                             collections=[EUNIS_ML_STAC_COLLECTION_ID],
                             bbox=bbox_list,
+                            datetime=year_datetime,
                             limit = 1000).items())
             case "GET":
                 ml_items = list(vito_stac.search(
@@ -794,6 +849,11 @@ class HybridModellingStarter(FlowFileTransform):
                 raise ValueError("Invalid eo_type. Must be 'EUNIS' or 'GET'.")
 
 
+        ml_items = self.filter_items_for_year(ml_items, year, "ML")
+        if not ml_items:
+            self.logger.error(f"No ML STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
+
         ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
         self.logger.info("Found " + str(len(ml_item_hrefs)) + "from the ML search" )
 
@@ -803,6 +863,7 @@ class HybridModellingStarter(FlowFileTransform):
         rb_items = list(im_stac.search(
             collections=[RB_STAC_COLLECTION_ID],
             bbox=bbox_list,
+            datetime=year_datetime,
             limit = 1000).items())
 
         rb_items = self.filter_items_for_year(rb_items, year, "RB")
@@ -849,7 +910,8 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("========== HYBRID MODELLING: ML PROCESSING STARTED ==========")
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
-        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list)
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
         success, raster_code_mapping = self.make_confusion_matrix_request(
                                 client_id,
                                 client_secret,
@@ -868,7 +930,10 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("========== HYBRID MODELLING: RB PROCESSING STARTED ==========")
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
-        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list)
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
+        # Caution: RDM operates on rb_item_hrefs (original TIFF URLs), NOT rb_map.tif.
+        # The local mosaic resolution fix does not affect its confusion matrix.
         success, _ = self.make_confusion_matrix_request(
                         client_id,
                         client_secret,
@@ -886,6 +951,19 @@ class HybridModellingStarter(FlowFileTransform):
 
 
         self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
+
+        # Validate both RDM products before attempting hybrid combination.
+        requested_sheet = "Level" + str(context.getProperty(self.typology_level).getValue()) + "Results"
+        for workbook_path in ("excel/ml_confusion_matrix.xlsx", "excel/rb_confusion_matrix.xlsx"):
+            with pd.ExcelFile(workbook_path) as wb:
+                if requested_sheet not in wb.sheet_names:
+                    self.logger.error(
+                        f"RDM workbook {workbook_path} lacks {requested_sheet}; "
+                        f"actual sheets={wb.sheet_names}. "
+                        "No hybrid map can be generated from this RB confusion matrix. "
+                        "Inspect SOURCE RASTER logs and RDM InputData for value mapping."
+                    )
+                    return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("========== HYBRID MODELLING: HYBRID MAP GENERATION STARTED ==========")
         result = self.generate_hybrid_maps(
