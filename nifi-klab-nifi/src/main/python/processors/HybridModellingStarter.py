@@ -117,7 +117,18 @@ class HybridModellingStarter(FlowFileTransform):
     def getPropertyDescriptors(self):
         return self.descriptors
 
-    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None, raster_code_mapping:dict=None)->pd.DataFrame:
+    def confusion_matrix_preprocessing(self, matrix: str = None, sheet_name: str = None,
+                                       raster_code_mapping: dict = None) -> pd.DataFrame:
+        """Return count matrix indexed by reference class, with predicted classes as columns.
+
+        RDM LevelNResults workbooks store *classification* classes in rows (column B),
+        and *reference* classes in columns (row 3).  The HM score calculation uses
+        P(predicted | reference), so the raw table must be transposed BEFORE assigning
+        row/column labels.  Do not normalize here; normalization happens downstream.
+        """
+        if not raster_code_mapping:
+            raise ValueError("Missing raster_code_mapping for confusion matrix")
+
         with pd.ExcelFile(matrix) as workbook:
             if sheet_name not in workbook.sheet_names:
                 detail = ""
@@ -126,36 +137,54 @@ class HybridModellingStarter(FlowFileTransform):
                     detail = f" RDM ErrorMatrix: {error_df.fillna('').astype(str).to_numpy().flatten()[:12].tolist()}"
                 raise ValueError(
                     f"RDM workbook '{matrix}' lacks '{sheet_name}'. "
-                    f"Available sheets: {workbook.sheet_names}.{detail} "
-                    "Check the original STAC raster values and RDM encoding/coverage; "
-                    "changing the local mosaic resolution alone will not fix RDM."
+                    f"Available sheets: {workbook.sheet_names}.{detail}"
                 )
             cm = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
-        interest = cm.shape[1] - 3
 
-        self.logger.info("Found Interest to be: " + str(interest))
+        # RDM layout: C3 onwards = reference labels; B4 onwards = predicted labels.
+        # First non-class header at row 3 is 'User Acc(%)'.
+        reference = []
+        col = 2
+        while col < cm.shape[1] and isinstance(cm.iat[2, col], str) and cm.iat[2, col].strip() not in ("User Acc(%)", ""):
+            reference.append(cm.iat[2, col].strip())
+            col += 1
+        interest = len(reference)
+        if interest == 0 or cm.shape[0] < 3 + interest:
+            raise ValueError(f"Cannot identify reference classes in {matrix} / {sheet_name}")
 
-        reference = cm.iloc[2, 2:2 + interest].tolist()
-
-        # Reference classes are in rows 3:9
         predicted = cm.iloc[3:3 + interest, 1].tolist()
+        if any(not isinstance(x, str) or not x.strip() for x in predicted):
+            raise ValueError(f"Malformed predicted class labels in {matrix} / {sheet_name}")
+        predicted = [x.strip() for x in predicted]
 
-        # Actual confusion-matrix values
-        counts = cm.iloc[3:3 + interest, 2: 2 + interest].copy()
+        raw = cm.iloc[3:3 + interest, 2:2 + interest]
+        numeric = raw.apply(pd.to_numeric, errors="raise")
+        if numeric.isna().any().any() or (numeric.to_numpy() < 0).any():
+            raise ValueError(f"Invalid confusion-matrix counts in {matrix} / {sheet_name}")
 
-        # Give it proper labels
+        # IMPORTANT: Excel is predicted x reference; HM expects reference x predicted.
+        counts = numeric.T.copy()
         counts.index = reference
         counts.columns = predicted
 
-        # Convert strings -> raster codes
-        counts.index = counts.index.map(raster_code_mapping)
-        counts.columns = counts.columns.map(raster_code_mapping)
+        unknown = [label for label in dict.fromkeys(reference + predicted)
+                   if label not in raster_code_mapping or pd.isna(raster_code_mapping[label])]
+        if unknown:
+            raise ValueError(f"Missing raster code mappings in {matrix}: {unknown}")
 
-        # Make sure values are numeric
-        counts = counts.apply(pd.to_numeric)
+        counts.index = [int(raster_code_mapping[label]) for label in reference]
+        counts.columns = [int(raster_code_mapping[label]) for label in predicted]
+        if not counts.index.is_unique or not counts.columns.is_unique:
+            raise ValueError(f"Non-unique raster codes after mapping in {matrix} / {sheet_name}")
+
+        counts = counts.astype(float)
+        self.logger.info(
+            f"Confusion matrix {sheet_name}: orientation=reference_rows/predicted_columns, "
+            f"shape={counts.shape}, observations={counts.to_numpy().sum():g}, "
+            f"reference_codes={counts.index.tolist()}, predicted_codes={counts.columns.tolist()}"
+        )
         self.logger.info(counts.head(20).to_string())
         return counts
-
 
     def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined", raster_code_mapping=None):
         """
