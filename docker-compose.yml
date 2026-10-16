@@ -31,7 +31,7 @@ services:
       bash -c "
       set -e &&
       test -f /opt/nifi/nifi-current/conf/nifi.properties || {
-          echo 'ERROR: missing nifi.properties; run bash scripts/init-nifi-conf.sh on host'
+          echo 'ERROR: missing nifi.properties; run bash start_up_conf/init-nifi-conf.sh on host'
           exit 1
       } &&
         echo 'Copying custom NARs to lib...' &&
