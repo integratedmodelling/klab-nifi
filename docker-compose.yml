@@ -24,10 +24,16 @@ services:
       - NIFI_INPUT_DIR=./nifi_input
       - NIFI_OUTPUT_DIR=./nifi_output
       - NIFI_PY_SCRIPTS_DIR=./py_scripts
-      - UV_HTTP_TIMEOUT=300
-      - UV_HTTP_RETRIES=5
+      - UV_HTTP_TIMEOUT: "300"
+      - UV_HTTP_RETRIES: "5"
+
     entrypoint: >
       bash -c "
+      set -e &&
+      test -f /opt/nifi/nifi-current/conf/nifi.properties || {
+          echo 'ERROR: missing nifi.properties; run bash scripts/init-nifi-conf.sh on host'
+          exit 1
+      } &&
         echo 'Copying custom NARs to lib...' &&
         cp /opt/nifi/custom-nars/*.nar /opt/nifi/nifi-current/lib/ &&
         cp -r /opt/nifi/py_prcs/processors/* /opt/nifi/nifi-current/python_extensions/ &&
