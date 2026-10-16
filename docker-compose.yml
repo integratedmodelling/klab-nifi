@@ -9,11 +9,15 @@ services:
       - ./custom-nars:/opt/nifi/custom-nars
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
-      - .\nifi-klab-nifi\src\main\python:/opt/nifi/py_prcs
-      - C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
-      - .\excel:/opt/nifi/nifi-current/excel
-      - .\raster:/opt/nifi/nifi-current/raster
-      - .\parquet:/opt/nifi/nifi-current/parquet
+      - ./nifi-klab-nifi/src/main/python:/opt/nifi/py_prcs
+      - #C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
+      # Environment variable: KLAB_HOME in their local .env file
+      - type: bind
+        source: ${KLAB_HOME}
+        target: /home/nifi/.klab
+      - ./excel:/opt/nifi/nifi-current/excel
+      - ./raster:/opt/nifi/nifi-current/raster
+      - ./parquet:/opt/nifi/nifi-current/parquet
       - ./nifi_conf:/opt/nifi/nifi-current/conf
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
