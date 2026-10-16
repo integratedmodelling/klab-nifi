@@ -11,3 +11,4 @@ nifi_input
 nifi_output
 _backup/
 nifi_conf/
+.env
