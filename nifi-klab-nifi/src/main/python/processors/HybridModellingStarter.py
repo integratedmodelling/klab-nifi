@@ -12,6 +12,8 @@ import rasterio
 from rasterio.vrt import WarpedVRT
 from rasterio.merge import merge
 from rasterio.enums import Resampling
+from rasterio.warp import transform_bounds
+from rasterio.windows import from_bounds, transform as window_transform
 import scipy
 from typing import List
 import time
@@ -25,17 +27,25 @@ import itertools
 import os
 import sys
 from sys import exit
+import json
+from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from urllib.parse import urlsplit
 
 
-EUNIS_ML_STAC_COLLECTION_ID = "EU_modelV2-1-MECE" ## <- Change this to v3 once  made available by Manu
-GET_ML_STAC_COLLECTION_ID = "IUCNGET-V2-MECE"
+EUNIS_ML_STAC_COLLECTION_ID = "EUNIS2021plus-V311-extent" ## <- Change this to v3 once  made available by Manu
+GET_ML_STAC_COLLECTION_ID = "IUCNGET-V317-extent"
 VITO_STAC_CATALOG = "https://catalogue.weed.apex.esa.int"
 IM_STAC_CATALOG = "https://stac.integratedmodelling.org"
-RB_STAC_COLLECTION_ID = "global_ecosystem_typology"
+RB_STAC_COLLECTION_ID = "et_rb_v2"
 HYBRID_STAC_API_COLLECTION_ID = "hybrid_modelling"
 CDSE_OIDC_ENDPOINT = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 RDM_BASE_URL = "https://weed-api.iiasa.ac.at"
 RDM_COLLECTION_ID = "global_validation"
+
+# Approximately 30 m in latitude; both mosaics need the same pixel grid.
+# Choose explicitly to avoid the previous implicit 0.01-degree (~1.1 km) downsampling.
+HYBRID_RESOLUTION_DEGREES = 0.00026949458523586
 
 
 @use_case("Triggers Hybrid Modelling Pipeline combining outputs from Rule Based Models and Machine Learning Models")
@@ -58,7 +68,7 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.bbox = PropertyDescriptor(
             name = "Bounding Box",
-            description = "Bounding Box of the Hybrid Request (minX, minY, maxX, maxY)",
+            description = "Bounding Box of the Hybrid Request (minX, minY, maxX, maxY) or a GeoJSON",
             validators = [StandardValidators.NON_EMPTY_VALIDATOR],
             required=False
         )
@@ -66,6 +76,14 @@ class HybridModellingStarter(FlowFileTransform):
         self.eo_type = PropertyDescriptor(
             name = "EO Type",
             description = "EO Type: IUCN GET or EUNIS",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.year = PropertyDescriptor(
+            name="Reference Year",
+            description="Calendar year (YYYY) used to select both ML and RB STAC items. "
+                        "May be provided as a FlowFile attribute named year.",
             validators=[StandardValidators.NON_EMPTY_VALIDATOR],
             required=False
         )
@@ -94,34 +112,81 @@ class HybridModellingStarter(FlowFileTransform):
             sensitive=True # Sensitive Field
         )
 
-        self.descriptors = [self.bbox, self.eo_type, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
+        self.descriptors = [self.bbox, self.eo_type, self.year, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
 
     def getPropertyDescriptors(self):
         return self.descriptors
 
+    def confusion_matrix_preprocessing(self, matrix: str = None, sheet_name: str = None,
+                                       raster_code_mapping: dict = None) -> pd.DataFrame:
+        """Return count matrix indexed by reference class, with predicted classes as columns.
 
-    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None)->pd.DataFrame:
-        cm1 = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
-        classes = cm1.iloc[2].tolist()
-        classes = [x for x in classes if str(x) != 'nan'and "User" not in str(x)]
+        RDM LevelNResults workbooks store *classification* classes in rows (column B),
+        and *reference* classes in columns (row 3).  The HM score calculation uses
+        P(predicted | reference), so the raw table must be transposed BEFORE assigning
+        row/column labels.  Do not normalize here; normalization happens downstream.
+        """
+        if not raster_code_mapping:
+            raise ValueError("Missing raster_code_mapping for confusion matrix")
 
-        data = []
-        for i in range(cm1.shape[1]):
-            for j in range(cm1.shape[0]):
-                ref = cm1.iloc[2][i]
-                pred = cm1.iloc[j][1]
+        with pd.ExcelFile(matrix) as workbook:
+            if sheet_name not in workbook.sheet_names:
+                detail = ""
+                if "ErrorMatrix" in workbook.sheet_names:
+                    error_df = pd.read_excel(workbook, sheet_name="ErrorMatrix", header=None)
+                    detail = f" RDM ErrorMatrix: {error_df.fillna('').astype(str).to_numpy().flatten()[:12].tolist()}"
+                raise ValueError(
+                    f"RDM workbook '{matrix}' lacks '{sheet_name}'. "
+                    f"Available sheets: {workbook.sheet_names}.{detail}"
+                )
+            cm = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
 
-                if ref in classes and pred in classes:
-                    freq = cm1.iloc[i][j]
+        # RDM layout: C3 onwards = reference labels; B4 onwards = predicted labels.
+        # First non-class header at row 3 is 'User Acc(%)'.
+        reference = []
+        col = 2
+        while col < cm.shape[1] and isinstance(cm.iat[2, col], str) and cm.iat[2, col].strip() not in ("User Acc(%)", ""):
+            reference.append(cm.iat[2, col].strip())
+            col += 1
+        interest = len(reference)
+        if interest == 0 or cm.shape[0] < 3 + interest:
+            raise ValueError(f"Cannot identify reference classes in {matrix} / {sheet_name}")
 
-                    data.append({
-                        "reference": ref, "predicted": pred, "frequency": freq
-                    })
+        predicted = cm.iloc[3:3 + interest, 1].tolist()
+        if any(not isinstance(x, str) or not x.strip() for x in predicted):
+            raise ValueError(f"Malformed predicted class labels in {matrix} / {sheet_name}")
+        predicted = [x.strip() for x in predicted]
 
-        return pd.DataFrame(data)
+        raw = cm.iloc[3:3 + interest, 2:2 + interest]
+        numeric = raw.apply(pd.to_numeric, errors="raise")
+        if numeric.isna().any().any() or (numeric.to_numpy() < 0).any():
+            raise ValueError(f"Invalid confusion-matrix counts in {matrix} / {sheet_name}")
 
+        # IMPORTANT: Excel is predicted x reference; HM expects reference x predicted.
+        counts = numeric.T.copy()
+        counts.index = reference
+        counts.columns = predicted
 
-    def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined"):
+        unknown = [label for label in dict.fromkeys(reference + predicted)
+                   if label not in raster_code_mapping or pd.isna(raster_code_mapping[label])]
+        if unknown:
+            raise ValueError(f"Missing raster code mappings in {matrix}: {unknown}")
+
+        counts.index = [int(raster_code_mapping[label]) for label in reference]
+        counts.columns = [int(raster_code_mapping[label]) for label in predicted]
+        if not counts.index.is_unique or not counts.columns.is_unique:
+            raise ValueError(f"Non-unique raster codes after mapping in {matrix} / {sheet_name}")
+
+        counts = counts.astype(float)
+        self.logger.info(
+            f"Confusion matrix {sheet_name}: orientation=reference_rows/predicted_columns, "
+            f"shape={counts.shape}, observations={counts.to_numpy().sum():g}, "
+            f"reference_codes={counts.index.tolist()}, predicted_codes={counts.columns.tolist()}"
+        )
+        self.logger.info(counts.head(20).to_string())
+        return counts
+
+    def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined", raster_code_mapping=None):
         """
         # description
         #----------------------------------------------------------------------------#
@@ -191,27 +256,6 @@ class HybridModellingStarter(FlowFileTransform):
         sheet_name = "Level"+str(typology_level)+"Results"
         self.logger.info("Fetching sheet " + sheet_name + " from the Confusion Matrix Excel")
 
-        cm1 = self.confusion_matrix_preprocessing(matrix1, sheet_name=sheet_name)
-        cm2 = self.confusion_matrix_preprocessing(matrix2, sheet_name=sheet_name)
-
-        self.logger.info(cm2.head().to_string())
-        self.logger.info(cm1.head().to_string())
-
-        # exit if the inputs are not matching
-        if cm1.shape != cm1.shape:
-            self.logger.error("confusion matrices have different numbers of rows/columns")
-            return False
-
-        # check column names of cm1
-        if not all(np.isin(cm1.columns,["reference","predicted","frequency"])):
-            self.logger.error("confusion matrix for map 1 lacks needed columns")
-            return False
-
-        # check column names of cm2
-        if not all(np.isin(cm2.columns,["reference","predicted","frequency"])):
-            self.logger.error("confusion matrix for map 1 lacks needed columns")
-            return False
-
         # access map 1
         try:
             m1_ds = rt.open(map1)
@@ -227,8 +271,8 @@ class HybridModellingStarter(FlowFileTransform):
             return False
 
         # read rasters
-        m1 = m1_ds.read(1)
-        m2 = m2_ds.read(1)
+        m1 = m1_ds.read(1).astype(np.float32)
+        m2 = m2_ds.read(1).astype(np.float32)
 
         # assign NA value if needed
         m1[np.where(m1 == m1_ds.nodata)] = np.nan
@@ -239,102 +283,117 @@ class HybridModellingStarter(FlowFileTransform):
 
         # mapped class identifiers
         uc = np.unique(np.concat([m1,m2]))
-        uc = uc[~np.isnan(uc)]
+        uc = uc[~np.isnan(uc)]  ## <- Here the classes like 100101, 100102 so on and so forth
+
+        cm1 = self.confusion_matrix_preprocessing(matrix1, sheet_name=sheet_name, raster_code_mapping=raster_code_mapping)
+        cm2 = self.confusion_matrix_preprocessing(matrix2, sheet_name=sheet_name, raster_code_mapping=raster_code_mapping)
+
+        classes = cm1.index.union(cm2.index).union(pd.Index(uc.astype(int)))
+        cm1 = cm1.reindex(index=classes,columns=classes,fill_value=0)
+        cm2 = cm2.reindex(index=classes,columns=classes,fill_value=0)
+
 
         # mean proportion of pixels per class across the target maps
-        ma = ((ndsum(m1 > 0, m1, uc) + ndsum(m2 > 0, m2, uc)) / 2) / m1.size
+        ma = ((ndsum(m1 > 0, m1, uc) + ndsum(m2 > 0, m2, uc)) / 2) / m1.size  ## For each class, average number of pixels
         ma = pd.DataFrame({"prior":ma})
-        ma.index = [cm1.index[int(i-1)] for i in uc]
+        ma.index = [int(i) for i in uc] ## prottek ta classes er corresponding probability ta store kore akta dataframe banalam
+        ma = ma.reindex(classes, fill_value=0)
+        self.logger.info(ma.head().to_string())
 
-        # define potential combinations of classes
-        comb = pd.DataFrame(itertools.product(cm1.index,cm1.index), columns=["A","B"])
-        comb["A_id"] = 0
-        comb["B_id"] = 0
+        cm1_prob = cm1.div(cm1.sum(axis=1).replace(0, np.nan), axis=0).fillna(0)
+        cm2_prob = cm2.div(cm2.sum(axis=1).replace(0, np.nan), axis=0).fillna(0)
 
-        # add grid ID for each map
-        for x in range(0,cm1.shape[0]):
-            comb.loc[comb['A'] == cm1.index[x],'A_id'] = x+1
-            comb.loc[comb['B'] == cm1.index[x],'B_id'] = x+1
+        comb = pd.DataFrame(itertools.product(uc, uc), columns=["A", "B"])
+
+        self.logger.info(comb.head().to_string())
+
 
         # estimate likely class per combination
         #----------------------------------------------------------------------------#
 
-        s = []
-        for x in cm1.index:
-            p = ma.loc[x].values
-            a = np.array(cm1.loc[x,comb["A"].values]).flatten()
-            b = np.array(cm2.loc[x,comb["B"].values]).flatten()
-            s += [p * a * b]
+        ### cm1: confusion matrix 1, cm2: confusion matrix 2, ma: another dataframe with all the classes as index and the value as the probabilities of classes
+        scores = []
+        for x in ma.index:
+            p = ma.loc[x, "prior"]
+            a = cm1_prob.loc[x, comb["A"].values].to_numpy()
+            b = cm2_prob.loc[x, comb["B"].values].to_numpy()
+            scores.append(p * a * b)
 
         # compile results
-        scores = pd.DataFrame(s).T
+        scores = pd.DataFrame(scores).T
         scores.columns = cm1.index
 
         # normalize by row
-        scores = scores.div(scores.sum(axis=1), axis=0)
-
-        del p, a, b, s
+        row_sums = scores.sum(axis=1)
+        scores = scores.div(row_sums.replace(0, np.nan), axis=0).fillna(0)
 
         # reclassify
         #----------------------------------------------------------------------------#
 
         # output classified map
-        oa = np.zeros((m1_ds.height,m1_ds.width), dtype="int32")
+        height, width = m1.shape
+        oa = np.zeros((height, width), dtype="int32")
+        ca = np.zeros((len(classes), height, width), dtype="float32")
 
-        # output stack of class confidences
-        ca = np.zeros((m1_ds.height,m1_ds.width,len(cm1.index)), dtype="float32")
+        for row_idx in range(comb.shape[0]):
+            A_val = comb["A"].iloc[row_idx]
+            B_val = comb["B"].iloc[row_idx]
 
-        for x in range(0,comb.shape[0]):
+            row_scores = scores.iloc[row_idx]
+            if row_scores.sum() == 0:
+                continue  # this (A,B) combo never appeared in the confusion matrices -> no evidence, skip
 
-            # target pixels
-            i = np.where((m1 == comb["A_id"].values[x]) &
-                        (m1 == comb["A_id"].values[x]))
-            if len(i[0]) == 0:
-                next
+            # pixels where map1 == A AND map2 == B (fixed: was m1==... & m1==... in the original)
+            mask = (m1 == A_val) & (m2 == B_val)
+            if not mask.any():
+                continue
 
-            # identify most likely class
-            oa[i] = np.where(cm1.index == scores.iloc[x].idxmax())[0][0]
+            best_class = row_scores.idxmax()  # actual class code, not positional index
+            oa[mask] = best_class
+            ca[:, mask] = row_scores.to_numpy()[:, np.newaxis]
 
-            # record class confidences
-            ca[i[0],i[1],:] = list(scores.iloc[x])
+        # --- Recover pixels valid in only one map ---
+        only_m1 = ~np.isnan(m1) & np.isnan(m2)
+        oa[only_m1] = m1[only_m1]
 
-            del i
-
-        # recover pixels classified in map 1 but not 2
-        i = np.where(~np.isnan(m1) & np.isnan(m2))
-        if len(i[0] > 0):
-            oa[i] = m1[i]
-
-        # recover pixels classified in map 2 but not 1
-        i = np.where(np.isnan(m1) & ~np.isnan(m2))
-        if len(i[0] > 0):
-            oa[i] = m2[i]
+        only_m2 = np.isnan(m1) & ~np.isnan(m2)
+        oa[only_m2] = m2[only_m2]
 
         # define outputs and export
         #----------------------------------------------------------------------------#
 
         # metadata profile
         p = m1_ds.profile.copy()
+        p.update(nodata=0)
 
         # export classified map
         self.logger.info("Writing the Final Classes")
-        oname = f'{output}/{name}-hybridMap_classification.tif'
+        oname = f'{output}/hybridMap_classification.tif'
         ods = rt.open(oname, "w", **p)
-        ods.write(oa, index=1)
+        ods.write(oa, indexes=1)
         ods.close()
 
         # export confidence map
         self.logger.info("Writing Confidence Map")
-        oname = f'{output}/{name}-hybridMap_confidence.tif'
+        oname = f'{output}/hybridMap_confidence.tif'
         p.update(count=len(cm1.index)) # update band count
         ods = rt.open(oname, "w", **p)
-        ods.write(oa)
+        ods.write(ca)
         ods.close()
 
         self.logger.info("Successfully generated Hybrid Map and Confidence Maps")
         return True
 
-    def make_confusion_matrix_request(self, client_id:str, client_secret:str, asset_hrefs: List[str], eo_type:str, collection_id:str=RDM_COLLECTION_ID, output_file_path:str="file.xlsx"):
+    def make_confusion_matrix_request(self,
+                                        client_id:str,
+                                        client_secret:str,
+                                        asset_hrefs: List[str],
+                                        eo_type:str,
+                                        geometry:str,
+                                        collection_id:str=RDM_COLLECTION_ID,
+                                        output_excel_file_path:str="file.xlsx",
+                                        output_parquet_file_path:str="file.parquet",
+                                        fetch_mapping_from_csv:bool=True):
 
         response = requests.post(
             CDSE_OIDC_ENDPOINT,
@@ -347,14 +406,14 @@ class HybridModellingStarter(FlowFileTransform):
 
         response.raise_for_status()
         access_token = response.json()["access_token"]
-
-        self.logger.info(access_token)
+        self.logger.info("Successfully Retrieved the Access Token from CDSE Endpoint")
         url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix"
 
         payload = {
             "collectionId": collection_id,
             "stacTifUrls": asset_hrefs,
-            "eoType": eo_type
+            "eoType": eo_type,
+            "polygonGeoJson": geometry
         }
 
         headers = {
@@ -370,6 +429,8 @@ class HybridModellingStarter(FlowFileTransform):
         self.logger.info("Polling the Status of the Request")
         status_url = f"{RDM_BASE_URL}/userdatasets/confusionmatrix/{reqdID}"
         excelResultUrl = None
+        parquetResultUrl = None
+        qmlResultUrl = None
 
         while 1:
             job = requests.get(status_url, headers=headers)
@@ -377,26 +438,86 @@ class HybridModellingStarter(FlowFileTransform):
             job_details = job.json()
             if job_details.get("status") == "completed":
                 self.logger.info("Confusion Matrix Generation Request handled successfully")
+                self.logger.info(str(job_details))
                 excelResultUrl = job_details.get("excelResultUrl")
+                parquetResultUrl = job_details.get("parquetResultUrl")
+                qmlResultUrl = job_details.get("qmlUrl")
                 break
             else:
                 self.logger.info("Request still processing. Waiting for 10 seconds before checking again...")
                 time.sleep(10)
 
-        if excelResultUrl is None:
-            self.logger.error("Couldn't find the Excel Result in the RDM Response")
+        if excelResultUrl is None or parquetResultUrl is None:
+            self.logger.error("Couldn't find the Excel Result or the Parquet Result in the RDM Response")
             return False
 
         with requests.get(excelResultUrl, stream=True) as response:
             response.raise_for_status()
 
-            with open(output_file_path, "wb") as f:
+            with open(output_excel_file_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
 
-        self.logger.info(f"Downloaded Confusion Matrix (.xlsx) to {output_file_path}")
-        return True
+        self.logger.info(f"Downloaded Confusion Matrix (.xlsx) to {output_excel_file_path}")
+
+        with requests.get(parquetResultUrl, stream=True) as response:
+            response.raise_for_status()
+
+            with open(output_parquet_file_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+        self.logger.info(f"Downloaded Parquet file (.parquet) to {output_parquet_file_path}")
+
+        mapping = None
+        if fetch_mapping_from_csv:
+            with requests.get(qmlResultUrl, stream=True) as response:
+                response.raise_for_status()
+
+                with tempfile.TemporaryFile() as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                    f.seek(0)
+
+                    self.logger.info(f"Downloaded CSV Raster Mappings from {qmlResultUrl}, Starting to parse the CSV file to get the raster code mappings")
+                    df = pd.read_csv(f)
+                    self.logger.info("EO Type provided: " + eo_type)
+
+                    eo_type = eo_type.strip().upper()
+                    valid_types = df["EOTYPE"].str.upper().unique().tolist()
+                    if eo_type not in valid_types:
+                        raise ValueError(f"eo_type must be one of {valid_types}, got '{eo_type}'")
+
+                    filtered = df[df["EOTYPE"].str.upper() == eo_type]
+
+                    # raster_value comes in as float (e.g. 10101.0), so cast for a clean int key
+                    mapping = dict(zip(filtered["name"], filtered["raster_value"].astype(int)))
+
+        return True, mapping
+
+    @staticmethod
+    def resolve_ml_asset_url(href: str) -> str:
+        """Keep HTTP(S) URLs intact; translate recognized CloudFerro S3 URLs."""
+        parsed = urlsplit(href)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return href
+        if parsed.scheme != "s3" or not parsed.netloc:
+            raise ValueError(f"Unsupported ML asset URL scheme or host: {href}")
+
+        # Retain the bucket and key, as in the original CloudFerro conversion.
+        # The routing convention must be validated against the live STAC assets.
+        s3_path = href[5:]
+        if "waw3-1" in href:
+            base = "https://s3.waw3-1.cloudferro.com/swift/v1/"
+        elif "waw4-1" in href:
+            base = "https://s3.waw4-1.cloudferro.com/swift/v1/"
+        else:
+            raise ValueError(f"Unknown CloudFerro region in S3 URL: {href}")
+        return base + s3_path
 
     def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
@@ -409,29 +530,121 @@ class HybridModellingStarter(FlowFileTransform):
         return local_path
 
 
-    def merge_tiffs(self, hrefs: list[str], output_path: str, resampling: Resampling = Resampling.nearest):
+    def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None,
+                     nodata_value: float = None, resampling: Resampling = Resampling.nearest,
+                     target_resolution: float = HYBRID_RESOLUTION_DEGREES):
+
+        self.logger.info("Proceeding to Merging the Tiffs")
+        target_crs = rasterio.crs.CRS.from_epsg(4326)
+        res = (target_resolution, target_resolution)
+        # Diagnostic: identify the Python implementation and actual resolution
+        self.logger.info(
+            "HM_RUNTIME_DIAGNOSTIC_resampling_resolution"
+            f"module={__file__} "
+            f"target_resolution={target_resolution!r} "
+            f"constant={HYBRID_RESOLUTION_DEGREES!r} "
+            f"res={res!r}"
+        )
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
             local_paths = [self.download_tiff(href, tmp_dir) for href in hrefs]
+            if nodata_value is None:
+                with rasterio.open(local_paths[0]) as first_ds:
+                    nodata_value = first_ds.nodata
 
-            # Determine target CRS from the first asset
-            with rasterio.open(local_paths[0]) as first_ds:
-                target_crs = first_ds.crs
-            print(f"Target CRS (from first asset): {target_crs}")
+            # Report raw source codes BEFORE any warp/resampling. Sampling uses
+            # a decimated array and avoids reading large source TIFFs in full.
+            for source_path in local_paths:
+                with rasterio.open(source_path) as source:
+                    sample_shape = (min(512, source.height), min(512, source.width))
+                    sample = source.read(1, out_shape=sample_shape, masked=True,
+                                         resampling=Resampling.nearest)
+                    values, counts = np.unique(sample.compressed(), return_counts=True)
+                    common = sorted(zip(counts.tolist(), values.tolist()), reverse=True)[:15]
+                    self.logger.info(
+                        f"SOURCE RASTER {os.path.basename(source_path)}: "
+                        f"crs={source.crs} bounds={source.bounds} size={source.width}x{source.height} "
+                        f"resolution={source.res} dtype={source.dtypes[0]} "
+                        f"nodata={source.nodata} sample_valid={sample.count()} "
+                        f"sample_codes_by_count={[(v, n) for n, v in common]}"
+                    )
 
-            # Open all datasets, wrapping any mismatched-CRS ones in a WarpedVRT
+            self.logger.info(f"Target CRS: {target_crs}, target resolution: {res} deg")
+
+            out_bounds = None
+            if bbox is not None:
+                # bbox is already in EPSG:4326, so no reprojection needed here
+                out_bounds = tuple(bbox)
+                self.logger.info(f"Forcing output bounds to bbox: {out_bounds}")
+
+            # Open all datasets. Always wrap in a WarpedVRT so both CRS
+            # reprojection (if needed) and resampling to the target
+            # resolution are enforced uniformly, even for inputs that are
+            # already in EPSG:4326 but at a different pixel size.
             datasets = []
             for path in local_paths:
                 ds = rasterio.open(path)
-                if ds.crs != target_crs:
-                    vrt = WarpedVRT(ds, crs=target_crs, resampling=resampling)
+                needs_reproject = ds.crs != target_crs
+                needs_resample = (
+                    round(abs(ds.transform.a), 8) != target_resolution
+                    or round(abs(ds.transform.e), 8) != target_resolution
+                )
+
+                if needs_reproject or needs_resample:
+                    vrt = WarpedVRT(
+                        ds,
+                        crs=target_crs,
+                        resampling=resampling,
+                        nodata=nodata_value,
+                        resolution=res,
+                    )
                     datasets.append(vrt)
+                    self.logger.info(
+                        f"{path}: reproject={needs_reproject}, resample={needs_resample} "
+                        f"(orig res=({ds.transform.a}, {ds.transform.e}))"
+                    )
                 else:
                     datasets.append(ds)
 
             try:
-                # Merge into a single mosaic array + transform
-                mosaic, out_transform = merge(datasets)
+                # Merge into a single mosaic array + transform, forcing both
+                # the pixel resolution and (optionally) output bounds so
+                # uncovered areas are filled with nodata rather than cropped away
+                mosaic, out_transform = merge(
+                    datasets,
+                    bounds=out_bounds,
+                    res=res,
+                    nodata=nodata_value,
+                    resampling=resampling,
+                )
+
+                # merge() snaps bounds to the pixel grid, which can leave
+                # extra rows/cols beyond the exact bbox. Crop back to bbox.
+                if out_bounds is not None:
+                    self.logger.info("Rounding off per the bbox bounds")
+                    window = from_bounds(*out_bounds, transform=out_transform)
+                    # floor the offset, ceil the size, so we never crop into
+                    # bbox-covered data — only trim what's truly outside it
+                    window = window.round_offsets(op="floor").round_lengths(op="ceil")
+
+                    col_off, row_off = int(window.col_off), int(window.row_off)
+                    width, height = int(window.width), int(window.height)
+
+                    # clamp to array bounds just in case rounding overshoots
+                    col_off = max(col_off, 0)
+                    row_off = max(row_off, 0)
+                    width = min(width, mosaic.shape[2] - col_off)
+                    height = min(height, mosaic.shape[1] - row_off)
+
+                    cropped_window = rasterio.windows.Window(col_off, row_off, width, height)
+                    mosaic = mosaic[:, row_off:row_off + height, col_off:col_off + width]
+                    out_transform = window_transform(cropped_window, out_transform)
+
+                    self.logger.info(
+                        f"Cropped mosaic to exact bbox: shape={mosaic.shape}, "
+                        f"transform={out_transform}"
+                    )
 
                 out_meta = datasets[0].meta.copy()
                 out_meta.update({
@@ -440,6 +653,7 @@ class HybridModellingStarter(FlowFileTransform):
                     "width": mosaic.shape[2],
                     "transform": out_transform,
                     "crs": target_crs,
+                    "nodata": nodata_value,
                     "compress": "deflate",
                     "tiled": True,
                     "bigtiff": "IF_SAFER",
@@ -452,10 +666,87 @@ class HybridModellingStarter(FlowFileTransform):
                 for ds in datasets:
                     ds.close()
 
+        with rasterio.open(output_path) as merged:
+            sample = merged.read(1, out_shape=(min(512, merged.height), min(512, merged.width)),
+                                 masked=True, resampling=Resampling.nearest)
+            codes, counts = np.unique(sample.compressed(), return_counts=True)
+            common = sorted(zip(counts.tolist(), codes.tolist()), reverse=True)[:15]
+            self.logger.info(
+                f"MERGED RASTER {output_path}: size={merged.width}x{merged.height} "
+                f"resolution={merged.res} bounds={merged.bounds} "
+                f"nodata={merged.nodata} sample_valid={sample.count()} "
+                f"sample_codes_by_count={[(v, n) for n, v in common]}"
+            )
         self.logger.info(f"Merged output written to {output_path}")
 
-    def transform(self, context, flowfile):
+    @staticmethod
+    def item_matches_year(item, target_year: int) -> tuple[bool, str]:
+        """Validate calendar year from STAC Item temporal metadata.
 
+        A range crossing a year boundary is deliberately rejected rather than
+        assuming all pixels represent the requested year. The server-side
+        datetime search only ensures temporal *intersection*, not this rule.
+        """
+        props = item.properties or {}
+        start = props.get("start_datetime")
+        end = props.get("end_datetime")
+        instant = props.get("datetime")
+        year_value = props.get("year")
+
+        def parse_dt(value):
+            if isinstance(value, datetime):
+                dt = value
+            elif isinstance(value, str):
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            else:
+                raise ValueError(f"Invalid STAC datetime: {value!r}")
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        try:
+            if start is not None or end is not None:
+                if start is None or end is None:
+                    return False, "incomplete start_datetime/end_datetime"
+                first, last = parse_dt(start), parse_dt(end)
+                if first > last:
+                    return False, "start_datetime later than end_datetime"
+                within = first.year == target_year and last.year == target_year
+                source = f"range {first.isoformat()}..{last.isoformat()}"
+            elif instant is not None:
+                observed = parse_dt(instant)
+                within = observed.year == target_year
+                source = f"datetime {observed.isoformat()}"
+            elif year_value is not None:
+                within = str(year_value).strip() == str(target_year)
+                source = f"properties.year={year_value}"
+            else:
+                return False, "missing temporal metadata"
+            if year_value is not None and str(year_value).strip() != str(target_year):
+                return False, f"conflicting properties.year={year_value}; {source}"
+            return within, source
+        except (TypeError, ValueError, OverflowError) as exc:
+            return False, f"invalid temporal metadata: {exc}"
+
+    def filter_items_for_year(self, items, target_year: int, label: str):
+        selected = []
+        for item in items:
+            matches, temporal_info = self.item_matches_year(item, target_year)
+            if matches:
+                selected.append(item)
+                self.logger.info(f"{label} STAC accepted item {item.id}: {temporal_info}")
+            else:
+                self.logger.info(f"{label} STAC skipped item {item.id}: {temporal_info}")
+        self.logger.info(
+            f"{label} STAC selection for year {target_year}: "
+            f"{len(selected)} of {len(items)} items accepted"
+        )
+        return selected
+
+    def transform(self, context, flowfile):
+        # Mark execution of a FlowFile, not merely NiFi processor initialization.
+        self.logger.info("========== HYBRID MODELLING: PROCESSING STARTED ==========")
+        self.logger.info("HM_RUNTIME_DIAGNOSTIC_: updated transform() executed")
         if flowfile is None:
             self.logger.error("Incoming flowfile is null")
             return FlowFileTransformResult(relationship="failure")
@@ -473,6 +764,22 @@ class HybridModellingStarter(FlowFileTransform):
             self.logger.error("eo_type should be one of EUNIS or GET")
             return FlowFileTransformResult(relationship="failure")
 
+        requested_year = context.getProperty(self.year).getValue()
+        if requested_year is None or not str(requested_year).strip():
+            requested_year = flowfile.getAttribute("year")
+        if requested_year is None or not str(requested_year).strip():
+            self.logger.error("Missing Reference Year: set processor property or FlowFile attribute 'year' (YYYY)")
+            return FlowFileTransformResult(relationship="failure")
+        try:
+            year = int(str(requested_year).strip())
+            if len(str(requested_year).strip()) != 4 or not (1900 <= year <= 2100):
+                raise ValueError("year must be four digits between 1900 and 2100")
+        except (TypeError, ValueError):
+            self.logger.error(f"Invalid Reference Year {requested_year!r}; expected YYYY")
+            return FlowFileTransformResult(relationship="failure")
+        year_datetime = f"{year}-01-01T00:00:00Z/{year}-12-31T23:59:59Z"
+        self.logger.info(f"HYBRID MODELLING: Reference Year={year}; STAC datetime={year_datetime}")
+
         bbox = context.getProperty(self.bbox).getValue()
         if bbox == None:
             bbox = flowfile.getAttribute("bbox")
@@ -481,63 +788,192 @@ class HybridModellingStarter(FlowFileTransform):
             self.logger.error("BBOX shouldn't be null")
             return FlowFileTransformResult(relationship="failure")
 
-        bbox = bbox.split(",")
-        bbox = [float(item) for item in bbox]
+        try:
+            # Try GeoJSON first
+            bbox_json = json.loads(bbox)
+
+            if isinstance(bbox_json, dict) and "type" in bbox_json:
+                geojson_type = bbox_json["type"]
+
+                if geojson_type == "Feature":
+                    geom = bbox_json.get("geometry")
+                elif geojson_type in ["Polygon", "MultiPolygon", "Point", "LineString"]:
+                    geom = bbox_json
+                else:
+                    raise ValueError(f"Unsupported GeoJSON type: {geojson_type}")
+
+                # Flatten all coordinate pairs and calculate bbox
+                def extract_coords(obj):
+                    if (
+                        isinstance(obj, list)
+                        and len(obj) >= 2
+                        and isinstance(obj[0], (int, float))
+                        and isinstance(obj[1], (int, float))
+                    ):
+                        yield obj
+                    else:
+                        for item in obj:
+                            yield from extract_coords(item)
+
+
+                coordinates = list(extract_coords(geom["coordinates"]))
+                xs = [coord[0] for coord in coordinates]
+                ys = [coord[1] for coord in coordinates]
+
+                bbox_list = [
+                    min(xs),
+                    min(ys),
+                    max(xs),
+                    max(ys)
+                ]
+                geometry = json.dumps(geom)
+                geojson = geom
+
+            else:
+                raise ValueError("Not GeoJSON")
+
+        except (json.JSONDecodeError, ValueError, KeyError, TypeError):
+            self.logger.info("Found the BBOX passed not to be a GeoJSON")
+
+            try:
+                bbox_list = [float(item.strip()) for item in bbox.split(",")]
+                minX, minY, maxX, maxY = bbox_list
+                geojson = {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [minX, minY],
+                        [maxX, minY],
+                        [maxX, maxY],
+                        [minX, maxY],
+                        [minX, minY]
+                    ]]
+                }
+
+            except ValueError:
+                self.logger.error(f"Invalid BBOX: {bbox}")
+                return FlowFileTransformResult(relationship="failure")
 
         client_id = context.getProperty(self.oidc_client_id).getValue()
         client_secret = context.getProperty(self.oidc_client_secret).getValue()
 
+        self.logger.info("========== HYBRID MODELLING: STAC SEARCH STARTED ==========")
         vito_stac = pystac_client.Client.open(VITO_STAC_CATALOG)
         im_stac = pystac_client.Client.open(IM_STAC_CATALOG)
 
         match eo_type.upper():
             case "EUNIS":
-                ml_items =vito_stac.search(
+                ml_items = list(vito_stac.search(
                             collections=[EUNIS_ML_STAC_COLLECTION_ID],
-                            bbox=bbox,
-                            limit = 1000).items()
+                            bbox=bbox_list,
+                            datetime=year_datetime,
+                            limit = 1000).items())
             case "GET":
-                ml_items =vito_stac.search(
+                ml_items = list(vito_stac.search(
                             collections=[GET_ML_STAC_COLLECTION_ID],
-                            bbox=bbox,
-                            limit = 1000).items()
+                            bbox=bbox_list,
+                            datetime=year_datetime,
+                            limit = 1000).items())
+
             case _:
                 raise ValueError("Invalid eo_type. Must be 'EUNIS' or 'GET'.")
 
-        ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
 
+        ml_items = self.filter_items_for_year(ml_items, year, "ML")
+        if not ml_items:
+            self.logger.error(f"No ML STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
+
+        ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
+        self.logger.info("Found " + str(len(ml_item_hrefs)) + "from the ML search" )
 
         '''
         Rule Based Outputs are guaranteed to be in 4326
         '''
-        rb_items = im_stac.search(
+        rb_items = list(im_stac.search(
             collections=[RB_STAC_COLLECTION_ID],
-            bbox=bbox,
-            limit = 1000).items()
+            bbox=bbox_list,
+            datetime=year_datetime,
+            limit = 1000).items())
 
+        rb_items = self.filter_items_for_year(rb_items, year, "RB")
+        if not rb_items:
+            self.logger.error(f"No RB STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
+
+        self.logger.info("Found " + str(len(rb_items)) + "from the Rule Based search" )
 
         match eo_type:
             case "EUNIS":
+                self.logger.info("Found the EO Type to be EUNIS")
                 rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "eunis" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
+
             case "GET":
-                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
+                self.logger.info("Found the EO Type to be GET")
+                # TEMPORARY: et_rb_v2 is currently confirmed to contain only IUCN GET.
+                # Select the same way as ML, without requiring semantic metadata.
+                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values()]
+
+                # FUTURE: Restore semantic filtering when RB STAC assets expose
+                # the klab.observable.semantics field consistently.
+                # rb_item_hrefs = [
+                #     asset.href
+                #     for item in rb_items
+                #     for asset in item.assets.values()
+                #     if "iucn" in str(asset.extra_fields.get(
+                #         "klab.observable.semantics", ""
+                #     )).lower()
+                # ]
+                self.logger.info(f"Selected {len(rb_item_hrefs)} RB asset URLs for GET")
+
+        # Do not rewrite valid HTTP(S) URLs; only convert recognized S3 URLs.
+        try:
+            ml_item_hrefs = [self.resolve_ml_asset_url(href) for href in ml_item_hrefs]
+        except ValueError as exc:
+            self.logger.error(f"Failed to resolve ML asset URL: {exc}")
+            return FlowFileTransformResult(relationship="failure")
 
 
+        if len(ml_item_hrefs) == 0 or len(rb_item_hrefs) == 0:
+            self.logger.error("The search over ML STAC or the RB STAC returned no Items over the specified Spatio Temporal Bounds")
+            return FlowFileTransformResult(relationship="failure")
 
-        ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + asset_href[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
-
+        self.logger.info("========== HYBRID MODELLING: ML PROCESSING STARTED ==========")
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
-        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif")
-        success = self.make_confusion_matrix_request(client_id, client_secret, ml_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/ml_confusion_matrix.xlsx")
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
+        success, raster_code_mapping = self.make_confusion_matrix_request(
+                                client_id,
+                                client_secret,
+                                ml_item_hrefs ,
+                                eo_type,
+                                json.dumps(geojson),
+                                RDM_COLLECTION_ID,
+                                "excel/ml_confusion_matrix.xlsx",
+                                "parquet/ml_parquet.parquet",
+                                True)
         if not success:
             self.logger.error("Confusion Matrix wasn't generated successfully for Machine Learning Model Outputs")
             return FlowFileTransformResult(relationship="failure")
 
 
 
+        self.logger.info("========== HYBRID MODELLING: RB PROCESSING STARTED ==========")
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
-        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif")
-        success = self.make_confusion_matrix_request(client_id, client_secret, rb_item_hrefs , eo_type, RDM_COLLECTION_ID, "excel/rb_confusion_matrix.xlsx")
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
+        # Caution: RDM operates on rb_item_hrefs (original TIFF URLs), NOT rb_map.tif.
+        # The local mosaic resolution fix does not affect its confusion matrix.
+        success, _ = self.make_confusion_matrix_request(
+                        client_id,
+                        client_secret,
+                        rb_item_hrefs ,
+                        eo_type,
+                        json.dumps(geojson),
+                        RDM_COLLECTION_ID,
+                        "excel/rb_confusion_matrix.xlsx",
+                        "parquet/rb_parquet.parquet",
+                        False)
+
         if not success:
             self.logger.info("Confusion Matrix wasn't generated successfully for Rule Based Model Outputs")
             return FlowFileTransformResult(relationship="failure")
@@ -545,14 +981,29 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
 
+        # Validate both RDM products before attempting hybrid combination.
+        requested_sheet = "Level" + str(context.getProperty(self.typology_level).getValue()) + "Results"
+        for workbook_path in ("excel/ml_confusion_matrix.xlsx", "excel/rb_confusion_matrix.xlsx"):
+            with pd.ExcelFile(workbook_path) as wb:
+                if requested_sheet not in wb.sheet_names:
+                    self.logger.error(
+                        f"RDM workbook {workbook_path} lacks {requested_sheet}; "
+                        f"actual sheets={wb.sheet_names}. "
+                        "No hybrid map can be generated from this RB confusion matrix. "
+                        "Inspect SOURCE RASTER logs and RDM InputData for value mapping."
+                    )
+                    return FlowFileTransformResult(relationship="failure")
+
+        self.logger.info("========== HYBRID MODELLING: HYBRID MAP GENERATION STARTED ==========")
         result = self.generate_hybrid_maps(
             typology_level = int(context.getProperty(self.typology_level).getValue()),
             map1="raster/ml_map.tif",
             map2="raster/rb_map.tif",
             matrix1="excel/ml_confusion_matrix.xlsx",
             matrix2="excel/rb_confusion_matrix.xlsx",
-            output=".",
-            name="hybrid"
+            output="raster/",
+            name="hybrid",
+            raster_code_mapping=raster_code_mapping
         )
 
         if not result:
@@ -560,7 +1011,5 @@ class HybridModellingStarter(FlowFileTransform):
             return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Successfully generated Hybrid Maps and Confidence Maps")
+        self.logger.info("========== HYBRID MODELLING: PROCESSING COMPLETED SUCCESSFULLY ==========")
         return FlowFileTransformResult(relationship="success")
-
-
-

@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   nifi:
     image: apache/nifi:2.4.0
@@ -11,16 +9,31 @@ services:
       - ./custom-nars:/opt/nifi/custom-nars
       - ./nifi_input:/opt/nifi/input
       - ./nifi_output:/opt/nifi/output
-      - .\nifi-klab-nifi\src\main\python:/opt/nifi/py_prcs
-      - $HOME\.klab:/home/nifi/.klab
+      - ./nifi-klab-nifi/src/main/python:/opt/nifi/py_prcs
+      #- C:\Users\alessio.bulckaen\.klab:/home/nifi/.klab
+      # Environment variable: KLAB_HOME in their local .env file
+      - type: bind
+        source: ${KLAB_HOME}
+        target: /home/nifi/.klab
+      - ./excel:/opt/nifi/nifi-current/excel
+      - ./raster:/opt/nifi/nifi-current/raster
+      - ./parquet:/opt/nifi/nifi-current/parquet
+      - ./nifi_conf:/opt/nifi/nifi-current/conf
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
       - NIFI_INPUT_DIR=./nifi_input
       - NIFI_OUTPUT_DIR=./nifi_output
       - NIFI_PY_SCRIPTS_DIR=./py_scripts
-      - NIFI_KLAB_DIR=./klab
+      - UV_HTTP_TIMEOUT=300
+      - UV_HTTP_RETRIES=5
+
     entrypoint: >
       bash -c "
+      set -e &&
+      test -f /opt/nifi/nifi-current/conf/nifi.properties || {
+          echo 'ERROR: missing nifi.properties; run bash start_up_conf/init-nifi-conf.sh on host'
+          exit 1
+      } &&
         echo 'Copying custom NARs to lib...' &&
         cp /opt/nifi/custom-nars/*.nar /opt/nifi/nifi-current/lib/ &&
         cp -r /opt/nifi/py_prcs/processors/* /opt/nifi/nifi-current/python_extensions/ &&

@@ -1,0 +1,57 @@
+PS C:\Users\alessio.bulckaen> cd C:\Users\alessio.bulckaen\git\klab-nifi
+PS C:\Users\alessio.bulckaen\git\klab-nifi> docker compose ps
+NAME               IMAGE               COMMAND                   SERVICE   CREATED        STATUS       PORTS
+klab-nifi-nifi-1   apache/nifi:2.4.0   "bash -c '\n  echo 'C…"   nifi      30 hours ago   Up 5 hours   0.0.0.0:3306-3307->3306-3307/tcp, [::]:3306-3307->3306-3307/tcp, 0.0.0.0:8443->8443/tcp, [::]:8443->8443/tcp
+PS C:\Users\alessio.bulckaen\git\klab-nifi> $backup = Join-Path (Get-Location) ("_backup\nifi_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+PS C:\Users\alessio.bulckaen\git\klab-nifi> New-Item -ItemType Directory -Path $backup -Force
+
+
+    Directory: C:\Users\alessio.bulckaen\git\klab-nifi\_backup
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        13/10/2026     18:43                nifi_20261013_184304
+
+
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Write-Host "Backup directory: $backup"
+Backup directory: C:\Users\alessio.bulckaen\git\klab-nifi\_backup\nifi_20261013_184304
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Test-Path $backup
+True
+PS C:\Users\alessio.bulckaen\git\klab-nifi> docker compose cp nifi:/opt/nifi/nifi-current/conf "$backup\conf"
+[+] copy 1/1
+ ✔ klab-nifi-nifi-1 Copied klab-nifi-nifi-1:/opt/nifi/nifi-current/conf to C:\... 0.2s
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Get-ChildItem "$backup\conf"
+
+
+    Directory: C:\Users\alessio.bulckaen\git\klab-nifi\_backup\nifi_20261013_184304\conf
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        13/10/2026     13:24                archive
+-a----        13/10/2026     13:24            107 authorizations.xml
+-a----        28/04/2025     19:16          21433 authorizers.xml
+-a----        28/04/2025     19:16           3108 bootstrap.conf
+-a----        13/10/2026     13:24           1993 flow.json.gz
+-a----        09/10/2026     15:20           4366 keystore.p12
+-a----        28/04/2025     19:16          16201 logback.xml
+-a----        09/10/2026     15:27           7173 login-identity-providers.xml
+-a----        13/10/2026     13:23          17343 nifi.properties
+-a----        28/04/2025     19:16          10015 state-management.xml
+-a----        09/10/2026     15:20           1734 truststore.p12
+-a----        13/10/2026     13:24            104 users.xml
+-a----        28/04/2025     19:16           2573 zookeeper.properties
+
+
+PS C:\Users\alessio.bulckaen\git\klab-nifi> docker compose stop nifi
+[+] stop 1/1
+ ✔ Container klab-nifi-nifi-1 Stopped                                                                  2.8s
+PS C:\Users\alessio.bulckaen\git\klab-nifi> docker compose cp nifi:/opt/nifi/nifi-current/conf "$backup\conf-stopped"
+[+] copy 1/1
+ ✔ klab-nifi-nifi-1 Copied klab-nifi-nifi-1:/opt/nifi/nifi-current/conf to C:\Users\alessio.bulckae... 0.2s
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Test-Path "$backup\conf-stopped\flow.json.gz"
+True
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Copy-Item .\docker-compose.yml "$backup\docker-compose.yml"
+PS C:\Users\alessio.bulckaen\git\klab-nifi> Copy-Item .\nifi-klab-nifi\src\main\python\processors\HybridModellingStarter.py "$backup\HybridModellingStarter.py"
+PS C:\Users\alessio.bulckaen\git\klab-nifi>
