@@ -121,7 +121,17 @@ public class KlabAsyncProcessingEmailNotif extends AbstractProcessor {
         String body = req.get().getBody();
         String dtURL = req.get().getDTURL();
 
+        System.out.println(recipient);
+        System.out.println(subject);
+        System.out.println(body);
+        System.out.println(dtURL);
+
         ContextScope contextScope = (ContextScope) klabController.getScope(String.valueOf(dtURL), ContextScope.class);
+        if (contextScope == null) {
+            getLogger().error("The ContextScope is null");
+            session.transfer(flowfile, REL_FAILURE);
+            return;
+        }
         EmailManager manager = null;
 
         if (contextScope instanceof ServiceUserScope serviceScope

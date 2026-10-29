@@ -28,7 +28,9 @@ import os
 import sys
 from sys import exit
 import json
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
+from urllib.parse import urlsplit
 
 
 EUNIS_ML_STAC_COLLECTION_ID = "EUNIS2021plus-V311-extent" ## <- Change this to v3 once  made available by Manu
@@ -40,6 +42,10 @@ HYBRID_STAC_API_COLLECTION_ID = "hybrid_modelling"
 CDSE_OIDC_ENDPOINT = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 RDM_BASE_URL = "https://weed-api.iiasa.ac.at"
 RDM_COLLECTION_ID = "global_validation"
+
+# Approximately 30 m in latitude; both mosaics need the same pixel grid.
+# Choose explicitly to avoid the previous implicit 0.01-degree (~1.1 km) downsampling.
+HYBRID_RESOLUTION_DEGREES = 0.00026949458523586
 
 
 @use_case("Triggers Hybrid Modelling Pipeline combining outputs from Rule Based Models and Machine Learning Models")
@@ -74,6 +80,14 @@ class HybridModellingStarter(FlowFileTransform):
             required=False
         )
 
+        self.year = PropertyDescriptor(
+            name="Reference Year",
+            description="Calendar year (YYYY) used to select both ML and RB STAC items. "
+                        "May be provided as a FlowFile attribute named year.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
         self.typology_level = PropertyDescriptor(
             name = "Typology Level",
             description = "Typology Level 1, 2 or 3, Generic to Specific Heirarchical Ordering",
@@ -98,38 +112,79 @@ class HybridModellingStarter(FlowFileTransform):
             sensitive=True # Sensitive Field
         )
 
-        self.descriptors = [self.bbox, self.eo_type, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
+        self.descriptors = [self.bbox, self.eo_type, self.year, self.typology_level, self.oidc_client_id, self.oidc_client_secret]
 
     def getPropertyDescriptors(self):
         return self.descriptors
 
-    def confusion_matrix_preprocessing(self, matrix:str=None, sheet_name:str=None, raster_code_mapping:dict=None)->pd.DataFrame:
-        cm = pd.read_excel(matrix, sheet_name=sheet_name, header=None)
-        interest = cm.shape[1] - 3
+    def confusion_matrix_preprocessing(self, matrix: str = None, sheet_name: str = None,
+                                       raster_code_mapping: dict = None) -> pd.DataFrame:
+        """Return count matrix indexed by reference class, with predicted classes as columns.
 
-        self.logger.info("Found Interest to be: " + str(interest))
+        RDM LevelNResults workbooks store *classification* classes in rows (column B),
+        and *reference* classes in columns (row 3).  The HM score calculation uses
+        P(predicted | reference), so the raw table must be transposed BEFORE assigning
+        row/column labels.  Do not normalize here; normalization happens downstream.
+        """
+        if not raster_code_mapping:
+            raise ValueError("Missing raster_code_mapping for confusion matrix")
 
-        reference = cm.iloc[2, 2:2 + interest].tolist()
+        with pd.ExcelFile(matrix) as workbook:
+            if sheet_name not in workbook.sheet_names:
+                detail = ""
+                if "ErrorMatrix" in workbook.sheet_names:
+                    error_df = pd.read_excel(workbook, sheet_name="ErrorMatrix", header=None)
+                    detail = f" RDM ErrorMatrix: {error_df.fillna('').astype(str).to_numpy().flatten()[:12].tolist()}"
+                raise ValueError(
+                    f"RDM workbook '{matrix}' lacks '{sheet_name}'. "
+                    f"Available sheets: {workbook.sheet_names}.{detail}"
+                )
+            cm = pd.read_excel(workbook, sheet_name=sheet_name, header=None)
 
-        # Reference classes are in rows 3:9
+        # RDM layout: C3 onwards = reference labels; B4 onwards = predicted labels.
+        # First non-class header at row 3 is 'User Acc(%)'.
+        reference = []
+        col = 2
+        while col < cm.shape[1] and isinstance(cm.iat[2, col], str) and cm.iat[2, col].strip() not in ("User Acc(%)", ""):
+            reference.append(cm.iat[2, col].strip())
+            col += 1
+        interest = len(reference)
+        if interest == 0 or cm.shape[0] < 3 + interest:
+            raise ValueError(f"Cannot identify reference classes in {matrix} / {sheet_name}")
+
         predicted = cm.iloc[3:3 + interest, 1].tolist()
+        if any(not isinstance(x, str) or not x.strip() for x in predicted):
+            raise ValueError(f"Malformed predicted class labels in {matrix} / {sheet_name}")
+        predicted = [x.strip() for x in predicted]
 
-        # Actual confusion-matrix values
-        counts = cm.iloc[3:3 + interest, 2: 2 + interest].copy()
+        raw = cm.iloc[3:3 + interest, 2:2 + interest]
+        numeric = raw.apply(pd.to_numeric, errors="raise")
+        if numeric.isna().any().any() or (numeric.to_numpy() < 0).any():
+            raise ValueError(f"Invalid confusion-matrix counts in {matrix} / {sheet_name}")
 
-        # Give it proper labels
+        # IMPORTANT: Excel is predicted x reference; HM expects reference x predicted.
+        counts = numeric.T.copy()
         counts.index = reference
         counts.columns = predicted
 
-        # Convert strings -> raster codes
-        counts.index = counts.index.map(raster_code_mapping)
-        counts.columns = counts.columns.map(raster_code_mapping)
+        unknown = [label for label in dict.fromkeys(reference + predicted)
+                   if label not in raster_code_mapping or pd.isna(raster_code_mapping[label])]
+        if unknown:
+            raise ValueError(f"Missing raster code mappings in {matrix}: {unknown}")
 
-        # Make sure values are numeric
-        counts = counts.apply(pd.to_numeric)
+        counts.index = [int(raster_code_mapping[label]) for label in reference]
+        counts.columns = [int(raster_code_mapping[label]) for label in predicted]
+        if not counts.index.is_unique or not counts.columns.is_unique:
+            raise ValueError(f"Non-unique raster codes after mapping in {matrix} / {sheet_name}")
+
+        counts = counts.astype(float)
+        self.logger.info(
+            f"Confusion matrix {sheet_name}: orientation=reference_rows/predicted_columns, "
+            f"shape={counts.shape}, observations={counts.to_numpy().sum():g}, "
+            f"reference_codes={counts.index.tolist()}, predicted_codes={counts.columns.tolist()}"
+        )
         self.logger.info(counts.head(20).to_string())
         return counts
-
 
     def generate_hybrid_maps(self, typology_level:int, map1=None,map2=None,matrix1=None,matrix2=None,output=None,name="combined", raster_code_mapping=None):
         """
@@ -444,6 +499,26 @@ class HybridModellingStarter(FlowFileTransform):
 
         return True, mapping
 
+    @staticmethod
+    def resolve_ml_asset_url(href: str) -> str:
+        """Keep HTTP(S) URLs intact; translate recognized CloudFerro S3 URLs."""
+        parsed = urlsplit(href)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return href
+        if parsed.scheme != "s3" or not parsed.netloc:
+            raise ValueError(f"Unsupported ML asset URL scheme or host: {href}")
+
+        # Retain the bucket and key, as in the original CloudFerro conversion.
+        # The routing convention must be validated against the live STAC assets.
+        s3_path = href[5:]
+        if "waw3-1" in href:
+            base = "https://s3.waw3-1.cloudferro.com/swift/v1/"
+        elif "waw4-1" in href:
+            base = "https://s3.waw4-1.cloudferro.com/swift/v1/"
+        else:
+            raise ValueError(f"Unknown CloudFerro region in S3 URL: {href}")
+        return base + s3_path
+
     def download_tiff(self, href: str, dest_dir: str) -> str:
         """Download a TIFF href to a local temp path."""
         local_path = os.path.join(dest_dir, os.path.basename(href.split("?")[0]))
@@ -457,11 +532,19 @@ class HybridModellingStarter(FlowFileTransform):
 
     def merge_tiffs(self, hrefs: list[str], output_path: str, bbox: List[float] = None,
                      nodata_value: float = None, resampling: Resampling = Resampling.nearest,
-                     target_resolution: float = 0.01):
+                     target_resolution: float = HYBRID_RESOLUTION_DEGREES):
 
         self.logger.info("Proceeding to Merging the Tiffs")
         target_crs = rasterio.crs.CRS.from_epsg(4326)
         res = (target_resolution, target_resolution)
+        # Diagnostic: identify the Python implementation and actual resolution
+        self.logger.info(
+            "HM_RUNTIME_DIAGNOSTIC_resampling_resolution"
+            f"module={__file__} "
+            f"target_resolution={target_resolution!r} "
+            f"constant={HYBRID_RESOLUTION_DEGREES!r} "
+            f"res={res!r}"
+        )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download all files first
@@ -469,6 +552,23 @@ class HybridModellingStarter(FlowFileTransform):
             if nodata_value is None:
                 with rasterio.open(local_paths[0]) as first_ds:
                     nodata_value = first_ds.nodata
+
+            # Report raw source codes BEFORE any warp/resampling. Sampling uses
+            # a decimated array and avoids reading large source TIFFs in full.
+            for source_path in local_paths:
+                with rasterio.open(source_path) as source:
+                    sample_shape = (min(512, source.height), min(512, source.width))
+                    sample = source.read(1, out_shape=sample_shape, masked=True,
+                                         resampling=Resampling.nearest)
+                    values, counts = np.unique(sample.compressed(), return_counts=True)
+                    common = sorted(zip(counts.tolist(), values.tolist()), reverse=True)[:15]
+                    self.logger.info(
+                        f"SOURCE RASTER {os.path.basename(source_path)}: "
+                        f"crs={source.crs} bounds={source.bounds} size={source.width}x{source.height} "
+                        f"resolution={source.res} dtype={source.dtypes[0]} "
+                        f"nodata={source.nodata} sample_valid={sample.count()} "
+                        f"sample_codes_by_count={[(v, n) for n, v in common]}"
+                    )
 
             self.logger.info(f"Target CRS: {target_crs}, target resolution: {res} deg")
 
@@ -566,10 +666,87 @@ class HybridModellingStarter(FlowFileTransform):
                 for ds in datasets:
                     ds.close()
 
+        with rasterio.open(output_path) as merged:
+            sample = merged.read(1, out_shape=(min(512, merged.height), min(512, merged.width)),
+                                 masked=True, resampling=Resampling.nearest)
+            codes, counts = np.unique(sample.compressed(), return_counts=True)
+            common = sorted(zip(counts.tolist(), codes.tolist()), reverse=True)[:15]
+            self.logger.info(
+                f"MERGED RASTER {output_path}: size={merged.width}x{merged.height} "
+                f"resolution={merged.res} bounds={merged.bounds} "
+                f"nodata={merged.nodata} sample_valid={sample.count()} "
+                f"sample_codes_by_count={[(v, n) for n, v in common]}"
+            )
         self.logger.info(f"Merged output written to {output_path}")
 
-    def transform(self, context, flowfile):
+    @staticmethod
+    def item_matches_year(item, target_year: int) -> tuple[bool, str]:
+        """Validate calendar year from STAC Item temporal metadata.
 
+        A range crossing a year boundary is deliberately rejected rather than
+        assuming all pixels represent the requested year. The server-side
+        datetime search only ensures temporal *intersection*, not this rule.
+        """
+        props = item.properties or {}
+        start = props.get("start_datetime")
+        end = props.get("end_datetime")
+        instant = props.get("datetime")
+        year_value = props.get("year")
+
+        def parse_dt(value):
+            if isinstance(value, datetime):
+                dt = value
+            elif isinstance(value, str):
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            else:
+                raise ValueError(f"Invalid STAC datetime: {value!r}")
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        try:
+            if start is not None or end is not None:
+                if start is None or end is None:
+                    return False, "incomplete start_datetime/end_datetime"
+                first, last = parse_dt(start), parse_dt(end)
+                if first > last:
+                    return False, "start_datetime later than end_datetime"
+                within = first.year == target_year and last.year == target_year
+                source = f"range {first.isoformat()}..{last.isoformat()}"
+            elif instant is not None:
+                observed = parse_dt(instant)
+                within = observed.year == target_year
+                source = f"datetime {observed.isoformat()}"
+            elif year_value is not None:
+                within = str(year_value).strip() == str(target_year)
+                source = f"properties.year={year_value}"
+            else:
+                return False, "missing temporal metadata"
+            if year_value is not None and str(year_value).strip() != str(target_year):
+                return False, f"conflicting properties.year={year_value}; {source}"
+            return within, source
+        except (TypeError, ValueError, OverflowError) as exc:
+            return False, f"invalid temporal metadata: {exc}"
+
+    def filter_items_for_year(self, items, target_year: int, label: str):
+        selected = []
+        for item in items:
+            matches, temporal_info = self.item_matches_year(item, target_year)
+            if matches:
+                selected.append(item)
+                self.logger.info(f"{label} STAC accepted item {item.id}: {temporal_info}")
+            else:
+                self.logger.info(f"{label} STAC skipped item {item.id}: {temporal_info}")
+        self.logger.info(
+            f"{label} STAC selection for year {target_year}: "
+            f"{len(selected)} of {len(items)} items accepted"
+        )
+        return selected
+
+    def transform(self, context, flowfile):
+        # Mark execution of a FlowFile, not merely NiFi processor initialization.
+        self.logger.info("========== HYBRID MODELLING: PROCESSING STARTED ==========")
+        self.logger.info("HM_RUNTIME_DIAGNOSTIC_: updated transform() executed")
         if flowfile is None:
             self.logger.error("Incoming flowfile is null")
             return FlowFileTransformResult(relationship="failure")
@@ -586,6 +763,22 @@ class HybridModellingStarter(FlowFileTransform):
         if eo_type.upper() not in ["GET","EUNIS"]:
             self.logger.error("eo_type should be one of EUNIS or GET")
             return FlowFileTransformResult(relationship="failure")
+
+        requested_year = context.getProperty(self.year).getValue()
+        if requested_year is None or not str(requested_year).strip():
+            requested_year = flowfile.getAttribute("year")
+        if requested_year is None or not str(requested_year).strip():
+            self.logger.error("Missing Reference Year: set processor property or FlowFile attribute 'year' (YYYY)")
+            return FlowFileTransformResult(relationship="failure")
+        try:
+            year = int(str(requested_year).strip())
+            if len(str(requested_year).strip()) != 4 or not (1900 <= year <= 2100):
+                raise ValueError("year must be four digits between 1900 and 2100")
+        except (TypeError, ValueError):
+            self.logger.error(f"Invalid Reference Year {requested_year!r}; expected YYYY")
+            return FlowFileTransformResult(relationship="failure")
+        year_datetime = f"{year}-01-01T00:00:00Z/{year}-12-31T23:59:59Z"
+        self.logger.info(f"HYBRID MODELLING: Reference Year={year}; STAC datetime={year_datetime}")
 
         bbox = context.getProperty(self.bbox).getValue()
         if bbox == None:
@@ -634,6 +827,7 @@ class HybridModellingStarter(FlowFileTransform):
                     max(ys)
                 ]
                 geometry = json.dumps(geom)
+                geojson = geom
 
             else:
                 raise ValueError("Not GeoJSON")
@@ -662,6 +856,7 @@ class HybridModellingStarter(FlowFileTransform):
         client_id = context.getProperty(self.oidc_client_id).getValue()
         client_secret = context.getProperty(self.oidc_client_secret).getValue()
 
+        self.logger.info("========== HYBRID MODELLING: STAC SEARCH STARTED ==========")
         vito_stac = pystac_client.Client.open(VITO_STAC_CATALOG)
         im_stac = pystac_client.Client.open(IM_STAC_CATALOG)
 
@@ -670,16 +865,23 @@ class HybridModellingStarter(FlowFileTransform):
                 ml_items = list(vito_stac.search(
                             collections=[EUNIS_ML_STAC_COLLECTION_ID],
                             bbox=bbox_list,
+                            datetime=year_datetime,
                             limit = 1000).items())
             case "GET":
                 ml_items = list(vito_stac.search(
                             collections=[GET_ML_STAC_COLLECTION_ID],
                             bbox=bbox_list,
+                            datetime=year_datetime,
                             limit = 1000).items())
 
             case _:
                 raise ValueError("Invalid eo_type. Must be 'EUNIS' or 'GET'.")
 
+
+        ml_items = self.filter_items_for_year(ml_items, year, "ML")
+        if not ml_items:
+            self.logger.error(f"No ML STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
 
         ml_item_hrefs = [asset.href for item in ml_items for asset in item.assets.values()]
         self.logger.info("Found " + str(len(ml_item_hrefs)) + "from the ML search" )
@@ -690,7 +892,13 @@ class HybridModellingStarter(FlowFileTransform):
         rb_items = list(im_stac.search(
             collections=[RB_STAC_COLLECTION_ID],
             bbox=bbox_list,
+            datetime=year_datetime,
             limit = 1000).items())
+
+        rb_items = self.filter_items_for_year(rb_items, year, "RB")
+        if not rb_items:
+            self.logger.error(f"No RB STAC items for year={year}, bbox={bbox_list}; refusing to mix years")
+            return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Found " + str(len(rb_items)) + "from the Rule Based search" )
 
@@ -701,21 +909,38 @@ class HybridModellingStarter(FlowFileTransform):
 
             case "GET":
                 self.logger.info("Found the EO Type to be GET")
-                for item in rb_items:
-                    for asset in item.assets.values():
-                        self.logger.info(asset.extra_fields.get("klab.observable.semantics", "NONE"))
+                # TEMPORARY: et_rb_v2 is currently confirmed to contain only IUCN GET.
+                # Select the same way as ML, without requiring semantic metadata.
+                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values()]
 
-                rb_item_hrefs = [asset.href for item in rb_items for asset in item.assets.values() if "iucn" in asset.extra_fields.get("klab.observable.semantics", "").lower()]
+                # FUTURE: Restore semantic filtering when RB STAC assets expose
+                # the klab.observable.semantics field consistently.
+                # rb_item_hrefs = [
+                #     asset.href
+                #     for item in rb_items
+                #     for asset in item.assets.values()
+                #     if "iucn" in str(asset.extra_fields.get(
+                #         "klab.observable.semantics", ""
+                #     )).lower()
+                # ]
+                self.logger.info(f"Selected {len(rb_item_hrefs)} RB asset URLs for GET")
 
-        ml_item_hrefs = ["https://s3.waw3-1.cloudferro.com/swift/v1/" + item[5:] if "waw3-1" in item else "https://s3.waw4-1.cloudferro.com/swift/v1/" + item[5:] for item in ml_item_hrefs]
+        # Do not rewrite valid HTTP(S) URLs; only convert recognized S3 URLs.
+        try:
+            ml_item_hrefs = [self.resolve_ml_asset_url(href) for href in ml_item_hrefs]
+        except ValueError as exc:
+            self.logger.error(f"Failed to resolve ML asset URL: {exc}")
+            return FlowFileTransformResult(relationship="failure")
 
 
         if len(ml_item_hrefs) == 0 or len(rb_item_hrefs) == 0:
             self.logger.error("The search over ML STAC or the RB STAC returned no Items over the specified Spatio Temporal Bounds")
             return FlowFileTransformResult(relationship="failure")
 
+        self.logger.info("========== HYBRID MODELLING: ML PROCESSING STARTED ==========")
         self.logger.info("Generating ML Inferences from " + ",".join(ml_item_hrefs))
-        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list)
+        self.merge_tiffs(ml_item_hrefs, "raster/ml_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
         success, raster_code_mapping = self.make_confusion_matrix_request(
                                 client_id,
                                 client_secret,
@@ -732,8 +957,12 @@ class HybridModellingStarter(FlowFileTransform):
 
 
 
+        self.logger.info("========== HYBRID MODELLING: RB PROCESSING STARTED ==========")
         self.logger.info("Generating RB Inferences from " + ",".join(rb_item_hrefs))
-        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list)
+        self.merge_tiffs(rb_item_hrefs, "raster/rb_map.tif", bbox_list,
+                         target_resolution=HYBRID_RESOLUTION_DEGREES)
+        # Caution: RDM operates on rb_item_hrefs (original TIFF URLs), NOT rb_map.tif.
+        # The local mosaic resolution fix does not affect its confusion matrix.
         success, _ = self.make_confusion_matrix_request(
                         client_id,
                         client_secret,
@@ -752,6 +981,20 @@ class HybridModellingStarter(FlowFileTransform):
 
         self.logger.info("Confusion Matrices are created, and the Maps have been generated, generating Hybrid Maps and Confusion Matrices")
 
+        # Validate both RDM products before attempting hybrid combination.
+        requested_sheet = "Level" + str(context.getProperty(self.typology_level).getValue()) + "Results"
+        for workbook_path in ("excel/ml_confusion_matrix.xlsx", "excel/rb_confusion_matrix.xlsx"):
+            with pd.ExcelFile(workbook_path) as wb:
+                if requested_sheet not in wb.sheet_names:
+                    self.logger.error(
+                        f"RDM workbook {workbook_path} lacks {requested_sheet}; "
+                        f"actual sheets={wb.sheet_names}. "
+                        "No hybrid map can be generated from this RB confusion matrix. "
+                        "Inspect SOURCE RASTER logs and RDM InputData for value mapping."
+                    )
+                    return FlowFileTransformResult(relationship="failure")
+
+        self.logger.info("========== HYBRID MODELLING: HYBRID MAP GENERATION STARTED ==========")
         result = self.generate_hybrid_maps(
             typology_level = int(context.getProperty(self.typology_level).getValue()),
             map1="raster/ml_map.tif",
@@ -768,4 +1011,5 @@ class HybridModellingStarter(FlowFileTransform):
             return FlowFileTransformResult(relationship="failure")
 
         self.logger.info("Successfully generated Hybrid Maps and Confidence Maps")
+        self.logger.info("========== HYBRID MODELLING: PROCESSING COMPLETED SUCCESSFULLY ==========")
         return FlowFileTransformResult(relationship="success")
