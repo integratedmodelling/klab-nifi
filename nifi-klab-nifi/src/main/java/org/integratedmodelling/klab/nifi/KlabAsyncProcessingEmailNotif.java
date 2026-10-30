@@ -14,6 +14,7 @@ import org.apache.nifi.reporting.InitializationException;
 import org.integratedmodelling.common.authentication.KlabCertificateImpl;
 import org.integratedmodelling.common.configuration.CommonConfiguration;
 import org.integratedmodelling.common.services.client.engine.EngineImpl;
+import org.integratedmodelling.common.utils.Utils;
 import org.integratedmodelling.klab.api.Klab;
 import org.integratedmodelling.klab.api.scope.ContextScope;
 import org.integratedmodelling.klab.api.scope.UserScope;
@@ -128,23 +129,27 @@ public class KlabAsyncProcessingEmailNotif extends AbstractProcessor {
 
         ContextScope contextScope = (ContextScope) klabController.getScope(String.valueOf(dtURL), ContextScope.class);
         if (contextScope == null) {
-            getLogger().error("The ContextScope is null");
-            session.transfer(flowfile, REL_FAILURE);
-            return;
-        }
-        EmailManager manager = null;
+            getLogger().info("No ContextScope available from the KlabController for the DT " + dtURL);
+            contextScope = userScope.connect(Utils.URLs.newURL(dtURL));
+            if (contextScope == null) {
+                getLogger().error("Unable to connect to the Digital Twin " + dtURL);
+                session.transfer(flowfile, REL_FAILURE);
+                return;
+            }
+            EmailManager manager = null;
 
-        if (contextScope instanceof ServiceUserScope serviceScope
-                && serviceScope.getService() instanceof BaseService service) {
-            manager = service.getEmailManager();
-        }
+            if (contextScope instanceof ServiceUserScope serviceScope
+                    && serviceScope.getService() instanceof BaseService service) {
+                manager = service.getEmailManager();
+            }
 
-        if (manager == null) {
-            getLogger().error("Couldn't send Email since Manager is null");
-            session.transfer(flowfile, REL_FAILURE);
-            return;
-        }
+            if (manager == null) {
+                getLogger().error("Couldn't send Email since Manager is null");
+                session.transfer(flowfile, REL_FAILURE);
+                return;
+            }
 
-        manager.send(recipient, subject, body, false);
+            manager.send(recipient, subject, body, false);
+        }
     }
 }
