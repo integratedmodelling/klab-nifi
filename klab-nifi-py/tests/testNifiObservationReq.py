@@ -43,8 +43,8 @@ ctx = contextualizer.WCS(
 )
 
 vitoStac = contextualizer.STAC(
-    collection="https://catalogue.weed.apex.esa.int/collections/EU_modelV2-1-MECE",
-    asset="EUNIS habitat level3",
+    collection="https://catalogue.weed.apex.esa.int/collections/EUNIS2021plus-V320-MECE",
+    asset="openEO",
     band = 0,
     s3EndpointUrl = "https://s3.waw4-1.cloudferro.com",
     #resource=persistantResourceConfig
@@ -65,7 +65,7 @@ msftStac = contextualizer.STAC(
 klabNifiObs = KlabObservationNifiRequest(
     ctx= klabContext,
     observationSemantics="geography:Elevation",
-    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.dmhthignao",
+    dtURL="https://services.integratedmodelling.org/runtime/main/api/v1/dt/ESA_INSTITUTIONAL.1e47cawocjpI",
     contextualizer= vitoStac
 )
 
