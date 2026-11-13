@@ -1,6 +1,7 @@
 """Confusion-matrix providers. Convention: REFERENCE rows x PREDICTED columns."""
 from pathlib import Path
 import pandas as pd
+import json
 from nifiapi.relationship import Relationship
 from nifiapi.properties import PropertyDescriptor, StandardValidators
 from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
@@ -23,9 +24,9 @@ class ConfusionMatrixProvider(FlowFileTransform):
     FAILURE = Relationship(name='failure', description='Failed to create confusion matrix')
 
     def __init__(self, **kwargs):
-        self.bbox = PropertyDescriptor(
-            name = "Bounding Box",
-            description = "Bounding box as minX, minY, maxX, maxY, a GeoJSON object, or a path to a GeoJSON file",
+        self.fusion_context_geojson = PropertyDescriptor(
+            name = "Context JSON",
+            description = "JSON context of the downloaded raster files",
             validators = [StandardValidators.NON_EMPTY_VALIDATOR],
             required=False
         )
@@ -59,7 +60,21 @@ class ConfusionMatrixProvider(FlowFileTransform):
             required=False
         )
 
-        self.descriptors = [self.bbox, self.year, self.parquet_path, self.mapping_csv, self.collections]
+        self.ml_raster_paths = PropertyDescriptor(
+            name='ML Raster Path',
+            description="Path to ML raster file.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.rb_raster_paths = PropertyDescriptor(
+            name='RB Raster Path',
+            description="Path to RB raster file.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.descriptors = [self.fusion_context_geojson, self.year, self.parquet_path, self.mapping_csv, self.collections, self.ml_raster_paths, self.rb_raster_paths]
 
     def getPropertyDescriptors(self):
         return self.descriptors
@@ -122,16 +137,16 @@ class ConfusionMatrixProvider(FlowFileTransform):
             raise ValueError('Invalid confusion matrix counts')
         return df
 
-    def bbox_to_geojson(bbox_str):
-        """Convert a bounding box string to a GeoJSON file."""
-        import json
-        from shapely.geometry import box, mapping
-        coords = [float(x) for x in bbox_str.split(',')]
-        if len(coords) != 4:
-            raise ValueError('Bounding box must have 4 comma-separated values')
-        geom = box(*coords)
-        geojson = mapping(geom)
-        return json.dumps(geojson)
+    # def bbox_to_geojson(bbox_str):
+    #     """Convert a bounding box string to a GeoJSON file."""
+    #     import json
+    #     from shapely.geometry import box, mapping
+    #     coords = [float(x) for x in bbox_str.split(',')]
+    #     if len(coords) != 4:
+    #         raise ValueError('Bounding box must have 4 comma-separated values')
+    #     geom = box(*coords)
+    #     geojson = mapping(geom)
+    #     return json.dumps(geojson)
 
     def from_validation_parquet(parquet_path, context_geojson, ml_tiles, rb_tiles, mapping_csv,
                                 reference_column='iucn_get_code', eo_type='GET', level=3,
@@ -140,9 +155,9 @@ class ConfusionMatrixProvider(FlowFileTransform):
         from contextlib import ExitStack
         from spatial_inputs import MosaicSource, read_context, read_validation_parquet, sample_validation, build_cms
         mapping = ConfusionMatrixProvider.read_mapping(mapping_csv, eo_type)
-        if isinstance(context_geojson, str):
-            if not context_geojson.strip().endswith('.geojson'):
-                context_geojson = ConfusionMatrixProvider.bbox_to_geojson(context_geojson)
+        # if isinstance(context_geojson, str):
+        #     if not context_geojson.strip().endswith('.geojson'):
+        #         context_geojson = ConfusionMatrixProvider.bbox_to_geojson(context_geojson)
         geom = read_context(context_geojson, raster_paths=[Path(x) for x in ml_tiles+rb_tiles])
         with ExitStack() as stack:
             ml = stack.enter_context(MosaicSource([Path(x) for x in ml_tiles], geom, level=level))
@@ -166,11 +181,11 @@ class ConfusionMatrixProvider(FlowFileTransform):
             return FlowFileTransformResult(relationship="failure")
 
         #we check if the processor has built-in parameters or if they are provided as flowfile attributes
-        bbox = context.getProperty(self.bbox).getValue()
-        if bbox is None or not bbox.strip():
-            bbox = flowfile.getAttribute("bbox")
-        if bbox is None or not bbox.strip():
-            self.logger.error("Bounding Box is missing from the processor property and FlowFile attribute 'bbox'")
+        fusion_context_geojson = context.getProperty(self.fusion_context_geojson).getValue()
+        if fusion_context_geojson is None or not fusion_context_geojson.strip():
+            fusion_context_geojson = flowfile.getAttribute("fusion_context_geojson")
+        if fusion_context_geojson is None or not fusion_context_geojson.strip():
+            self.logger.error("Bounding Box is missing from the processor property and FlowFile attribute 'fusion_context_geojson'")
             return FlowFileTransformResult(relationship="failure")
 
         year = context.getProperty(self.year).getValue()
@@ -200,6 +215,20 @@ class ConfusionMatrixProvider(FlowFileTransform):
         if collections is None or not collections.strip():
             self.logger.error("STAC Collections is missing from the processor property and FlowFile attribute 'collections'")
             return FlowFileTransformResult(relationship="failure")
+
+        ml_raster_paths = context.getProperty(self.ml_raster_paths).getValue()
+        if ml_raster_paths is None or not ml_raster_paths.strip():
+            ml_raster_paths = flowfile.getAttribute("ml_raster_path")
+        if ml_raster_paths is None or not ml_raster_paths.strip():
+            self.logger.error("ML Raster Path property missing from the processor property and FlowFile attribute 'ml_raster_path'")
+            return FlowFileTransformResult(relationship="failure")
+
+        rb_raster_paths = context.getProperty(self.rb_raster_paths).getValue()
+        if rb_raster_paths is None or not rb_raster_paths.strip():
+            rb_raster_paths = flowfile.getAttribute("rb_raster_path")
+        if rb_raster_paths is None or not rb_raster_paths.strip():
+            self.logger.error("RB Raster Path property missing from the processor property and FlowFile attribute 'rb_raster_path'")
+            return FlowFileTransformResult(relationship="failure")
         
         try:
 
@@ -213,8 +242,8 @@ class ConfusionMatrixProvider(FlowFileTransform):
                 if path.is_file() and path.suffix.lower() in {".tif", ".tiff"}
             ]
 
-            ml_tiles = [path for path in tifs if collections.split(',')[1] in str(path)]
-            rb_tiles = [path for path in tifs if collections.split(',')[0] in str(path)]
+            ml_tiles = [path for path in json.loads(ml_raster_paths)]
+            rb_tiles = [path for path in json.loads(rb_raster_paths)]
 
             if not ml_tiles:
                 raise ValueError(f"No tiles found for the specified collections: {collections.split(',')[1]}")
@@ -223,7 +252,7 @@ class ConfusionMatrixProvider(FlowFileTransform):
             
             cm_ml, cm_rb, stats = ConfusionMatrixProvider.from_validation_parquet(
                 parquet_path=parquet_path,
-                context_geojson=bbox,
+                context_geojson=fusion_context_geojson,
                 ml_tiles=ml_tiles,
                 rb_tiles=rb_tiles,
                 mapping_csv=mapping_csv

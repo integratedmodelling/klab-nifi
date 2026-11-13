@@ -31,7 +31,7 @@ class FusionHM(FlowFileTransform):
         tags = ['WEED', 'fusion', 'hybrid', 'classification', 'Hybrid', 'Modelling']
         dependencies = ['rasterio', 'numpy', 'pandas']
 
-    SUCESS = Relationship(name='success', description='Successfully created HM output')
+    SUCCESS = Relationship(name='success', description='Successfully created HM output')
     FAILURE = Relationship(name='failure', description='Failed to create HM output')
 
     def __init__(self, **kwargs):
@@ -57,7 +57,28 @@ class FusionHM(FlowFileTransform):
             required=False
         )
 
-        self.descriptors = [self.collections, self.ml_confusion_matrix_path, self.rb_confusion_matrix_path]
+        self.fusion_context_geojson = PropertyDescriptor(
+            name='Context JSON',
+            description="JSON context of downloaded raster files",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.ml_raster_paths = PropertyDescriptor(
+            name='ML Raster Path',
+            description="Path to ML raster file.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.rb_raster_paths = PropertyDescriptor(
+            name='RB Raster Path',
+            description="Path to RB raster file.",
+            validators=[StandardValidators.NON_EMPTY_VALIDATOR],
+            required=False
+        )
+
+        self.descriptors = [self.collections, self.ml_confusion_matrix_path, self.rb_confusion_matrix_path, self.fusion_context_geojson, self.ml_raster_paths, self.rb_raster_paths]
 
     def getPropertyDescriptors(self):
         return self.descriptors     
@@ -344,10 +365,10 @@ class FusionHM(FlowFileTransform):
             self.logger.error("RB Confusion Matrix Path property missing from the processor property and FlowFile attribute 'rb.confusion.matrix.path'")
             return FlowFileTransformResult(relationship="failure")
 
-        context_json = context.getProperty(self.context_json).getValue()
-        if context_json is None or not context_json.strip():
-            context_json = flowfile.getAttribute("fusion_context_geojson")
-        if context_json is None or not context_json.strip():
+        fusion_context_geojson = context.getProperty(self.fusion_context_geojson).getValue()
+        if fusion_context_geojson is None or not fusion_context_geojson.strip():
+            fusion_context_geojson = flowfile.getAttribute("fusion_context_geojson")
+        if fusion_context_geojson is None or not fusion_context_geojson.strip():
             self.logger.error("Context GeoJSON property missing from the processor property and FlowFile attribute 'fusion_context_geojson'")
             return FlowFileTransformResult(relationship="failure")
 
@@ -367,18 +388,28 @@ class FusionHM(FlowFileTransform):
 
         try:
             root = Path("/opt/nifi/output")
-            if not context_json:
-                raise ValueError("Missing bounding geometry in FlowFile attribute 'fusion_context_geojson'")
-            context_geojson = json.loads(context_json)
 
+            from rasterio.warp import transform_bounds
+            from shapely.geometry import box
+            from shapely.ops import unary_union
             from spatial_inputs import MosaicSource, read_context
-            geometry = read_context(context_geojson, raster_paths=ml_raster_paths + rb_raster_paths)
+            ml_raster_paths_json = json.loads(ml_raster_paths)
+            rb_raster_paths_json = json.loads(rb_raster_paths)
+            geometry = read_context(
+                fusion_context_geojson,
+                raster_paths=ml_raster_paths_json + rb_raster_paths_json
+            )
             with ExitStack() as stack:
                 ml_mosaic = stack.enter_context(
-                    MosaicSource(ml_raster_paths, geometry, overlap_policy='error')
+                    MosaicSource(ml_raster_paths_json, geometry, overlap_policy='error')
                 )
                 rb_mosaic = stack.enter_context(
-                    MosaicSource(rb_raster_paths, geometry, reference=ml_mosaic, overlap_policy='error')
+                    MosaicSource(rb_raster_paths_json, geometry, reference=ml_mosaic, overlap_policy='error')
+                )
+                self.logger.info(
+                    "Fusion mosaic tile inputs: "
+                    f"ML={[(str(tile[0]), tile[2].bounds) for tile in ml_mosaic.tiles]}; "
+                    f"RB={[(str(tile[0]), tile[2].bounds) for tile in rb_mosaic.tiles]}"
                 )
                 summary = FusionHM.fuse_v2(
                     ml_path=ml_mosaic,

@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 import json
 import traceback
+import rasterio
 from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 from nifiapi.properties import PropertyDescriptor, StandardValidators
 from nifiapi.relationship import Relationship
@@ -17,7 +18,7 @@ class STACDownloader(FlowFileTransform):
         version = '0.0.1-SNAPSHOT'
         description = 'STAC asset discovery/downloading.'
         tags = ['STAC','download','raster']
-        dependencies = ['pystac-client','shapely','pyproj','requests']
+        dependencies = ['pystac-client','shapely','pyproj','rasterio','requests']
 
     SUCCESS = Relationship(name="success", description="Successfully discovered and downloaded corresponding STAC assets")
     FAILURE = Relationship(name="failure", description="Failed to discover or download STAC assets")
@@ -67,6 +68,29 @@ class STACDownloader(FlowFileTransform):
 
     def getRelationships(self):
         return [self.SUCCESS, self.FAILURE]
+
+    @staticmethod
+    def context_from_raster_paths(paths):
+        from rasterio.warp import transform_bounds
+        from shapely.geometry import box, mapping
+        from shapely.ops import unary_union
+
+        footprints = []
+        for path in paths:
+            with rasterio.open(path) as source:
+                if source.crs is None:
+                    raise ValueError(f"Downloaded raster has no CRS: {path}")
+                bounds_wgs84 = transform_bounds(
+                    source.crs, "EPSG:4326", *source.bounds, densify_pts=21
+                )
+                footprints.append(box(*bounds_wgs84))
+        if not footprints:
+            raise ValueError("Cannot build fusion context: no downloaded rasters")
+
+        geometry = unary_union(footprints)
+        if not geometry.is_valid or geometry.is_empty:
+            raise ValueError("Downloaded raster footprints produced an invalid fusion context")
+        return geometry, mapping(geometry)
 
     @staticmethod
     def context_wgs84(context_input):
@@ -273,10 +297,9 @@ class STACDownloader(FlowFileTransform):
                 self.logger.error("No STAC items found for the given parameters.")
                 return FlowFileTransformResult(relationship="failure")
 
-            #we make sure bbox is the right format for context_wgs84
+            #The input 'bbox' is used to select STAC items
+            #'fusion context' is built from their downloaded rasters, expanding the bbox
             print(f"STAC Downloader: Using bounding box {bbox} for STAC item selection.")
-
-            _, context_geojson = self.context_wgs84(bbox)
 
             #choose raster assets
             assets = self.choose_raster_assets(items, asset_key)
@@ -301,6 +324,12 @@ class STACDownloader(FlowFileTransform):
 
             if not ml_raster_paths or not rb_raster_paths:
                 raise ValueError("No downloaded rasters found for the ML or RB collection")
+
+            context_geometry, context_geojson = self.context_from_raster_paths(downloaded_paths)
+            self.logger.info(
+                f"Fusion context derived from {len(downloaded_paths)} downloaded rasters; "
+                f"EPSG:4326 bounds={context_geometry.bounds}"
+            )
 
             return FlowFileTransformResult(
                 relationship="success",
