@@ -17,7 +17,7 @@ services:
       - .\excel:/opt/nifi/nifi-current/excel
       - .\raster:/opt/nifi/nifi-current/raster
       - .\parquet:/opt/nifi/nifi-current/parquet
-      -  C:\Users\arnab.moitra\.klab:/home/nifi/.klab
+      -  C:\Users\libe.renteria\.klab:/home/nifi/.klab
     environment:
       - NIFI_CUSTOM_NARS_DIR=./custom-nars
       - NIFI_INPUT_DIR=./nifi_input
@@ -32,3 +32,7 @@ services:
         echo 'Starting NiFi...' &&
         /opt/nifi/scripts/start.sh
       "
+    build: 
+      context: .
+      dockerfile: Dockerfile.nifi
+    

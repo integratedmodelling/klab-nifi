@@ -308,24 +308,18 @@ class STACDownloader(FlowFileTransform):
             target_dir = Path("/opt/nifi/output/stac_download")
             downloaded_paths = self.download_assets(assets, target_dir)
 
-            rb_collection, ml_collection = collections
+            collection_groups = {}
 
-            ml_raster_paths = [
-                str(path)
-                for asset, path in zip(assets, downloaded_paths)
-                if asset["collection"] == ml_collection
-            ]
-
-            rb_raster_paths = [
-                str(path)
-                for asset, path in zip(assets, downloaded_paths)
-                if asset["collection"] == rb_collection
-            ]
-
-            if not ml_raster_paths or not rb_raster_paths:
-                raise ValueError("No downloaded rasters found for the ML or RB collection")
+            for asset, path in zip(assets, downloaded_paths):
+                collection = asset["collection"]
+                group = collection_groups.setdefault(
+                    collection,
+                    {"folder": str(path.parent), "rasters": []},
+                )
+                group["rasters"].append(str(path))
 
             context_geometry, context_geojson = self.context_from_raster_paths(downloaded_paths)
+
             self.logger.info(
                 f"Fusion context derived from {len(downloaded_paths)} downloaded rasters; "
                 f"EPSG:4326 bounds={context_geometry.bounds}"
@@ -333,11 +327,44 @@ class STACDownloader(FlowFileTransform):
 
             return FlowFileTransformResult(
                 relationship="success",
-                attributes={"ml_raster_path": json.dumps(ml_raster_paths),
-                            "rb_raster_path": json.dumps(rb_raster_paths),
-                            "fusion_context_geojson": json.dumps(context_geojson)
-                            }
+                attributes={
+                    "downloaded_stac_paths": json.dumps(
+                        {"collections": collection_groups}
+                    ),
+                    "fusion_context_geojson": json.dumps(context_geojson),
+                },
             )
+
+
+            # rb_collection, ml_collection = collections
+
+            # ml_raster_paths = [
+            #     str(path)
+            #     for asset, path in zip(assets, downloaded_paths)
+            #     if asset["collection"] == ml_collection
+            # ]
+
+            # rb_raster_paths = [
+            #     str(path)
+            #     for asset, path in zip(assets, downloaded_paths)
+            #     if asset["collection"] == rb_collection
+            # ]
+
+            # if not ml_raster_paths or not rb_raster_paths:
+            #     raise ValueError("No downloaded rasters found for the ML or RB collection")
+
+            # context_geometry, context_geojson = self.context_from_raster_paths(downloaded_paths)
+            # self.logger.info(
+            #     f"Fusion context derived from {len(downloaded_paths)} downloaded rasters; "
+            #     f"EPSG:4326 bounds={context_geometry.bounds}"
+            # )
+
+            # return FlowFileTransformResult(
+            #     relationship="success",
+            #     attributes={"downloaded_stac_paths": json.dumps({"ml": ml_raster_paths,"rb": rb_raster_paths,}),
+            #                 "fusion_context_geojson": json.dumps(context_geojson)
+            #                 }
+            # )
 
         except Exception as e:
             self.logger.error(f"An error occurred while processing STAC items: {e}")
