@@ -2,7 +2,7 @@ import requests
 
 
 a = {
-    "bbox":"-74.2671722760229, 11.0349789536671, -74.0845448314173, 11.2158343336099",  # minX, minY, maxX, maxY (example bounding box for Czech Republic)
+    "bbox":"-75, 10, -74, 11",  # minX, minY, maxX, maxY (example bounding box for Czech Republic)
     "eo_type":"GET",
     "dt_url":"https://a.b.c.d",
     "year":"2024",
